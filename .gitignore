@@ -33,3 +33,5 @@ __MACOSX
 # Added by cargo
 
 /target
+
+host_key.pem
