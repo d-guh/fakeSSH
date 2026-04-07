@@ -1,19 +1,45 @@
-pub mod auth;
 pub mod server;
 pub mod shell;
-
-use std::sync::Arc;
 
 use russh::keys::ssh_key::LineEnding;
 use russh::keys::ssh_key::rand_core::OsRng;
 use russh::keys::{Algorithm, PrivateKey};
 use russh::server::Server as _;
+use serde::Deserialize;
+use server::Server;
+use std::collections::HashMap;
+use std::sync::Arc;
 use tokio::net::TcpListener;
 
-use auth::load_credentials;
-use server::Server;
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    env_logger::builder()
+        .filter_level(log::LevelFilter::Info)
+        .init();
 
-fn get_or_create_host_key(path: &str) -> Result<PrivateKey, Box<dyn std::error::Error>> {
+    let cfg = Config::new("config.toml")?;
+
+    let credentials = Arc::new(cfg.credentials);
+
+    let config = russh::server::Config {
+        inactivity_timeout: Some(std::time::Duration::from_secs(cfg.inactivity_timeout_secs)),
+        auth_rejection_time: std::time::Duration::from_secs(cfg.auth_rejection_time_secs),
+        auth_rejection_time_initial: Some(std::time::Duration::from_secs(
+            cfg.auth_rejection_time_initial_secs,
+        )),
+        keys: vec![get_or_create_host_key(&cfg.host_key_file)?],
+        ..Default::default()
+    };
+    let config = Arc::new(config);
+    let mut sh = Server::new(credentials);
+
+    let socket = TcpListener::bind((&*cfg.listen, cfg.port)).await?;
+    log::info!("Honeypot listening on {}:{}", cfg.listen, cfg.port);
+    sh.run_on_socket(config, &socket).await?;
+    Ok(())
+}
+
+pub fn get_or_create_host_key(path: &str) -> Result<PrivateKey, Box<dyn std::error::Error>> {
     let p = std::path::Path::new(path);
     if p.exists() {
         let pem = std::fs::read_to_string(p)?;
@@ -32,29 +58,22 @@ fn get_or_create_host_key(path: &str) -> Result<PrivateKey, Box<dyn std::error::
     }
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    env_logger::builder()
-        .filter_level(log::LevelFilter::Info)
-        .init();
 
-    let credentials = Arc::new(load_credentials("credentials.json")?);
+#[derive(Deserialize)]
+pub struct Config {
+    pub listen: String,
+    pub port: u16,
+    pub host_key_file: String,
+    pub inactivity_timeout_secs: u64,
+    pub auth_rejection_time_secs: u64,
+    pub auth_rejection_time_initial_secs: u64,
+    pub credentials: HashMap<String, String>,
+}
 
-    let config = russh::server::Config {
-        inactivity_timeout: Some(std::time::Duration::from_secs(3600)),
-        auth_rejection_time: std::time::Duration::from_secs(3),
-        auth_rejection_time_initial: Some(std::time::Duration::from_secs(0)),
-        keys: vec![get_or_create_host_key("host_key.pem")?],
-        ..Default::default()
-    };
-    let config = Arc::new(config);
-    let mut sh = Server::new(credentials);
-
-    let listen = "0.0.0.0";
-    let port = 2222;
-
-    let socket = TcpListener::bind((listen, port)).await?;
-    log::info!("Honeypot listening on {}:{}", listen, port);
-    sh.run_on_socket(config, &socket).await?;
-    Ok(())
+impl Config {
+    pub fn new(cfg_path: &str) -> Result<Config, Box<dyn std::error::Error>> {
+        let contents = std::fs::read_to_string(cfg_path)?;
+        let config: Config = toml::from_str(&contents)?;
+        Ok(config)
+    }
 }
