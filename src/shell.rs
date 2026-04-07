@@ -50,13 +50,19 @@ impl ShellPerformer {
 
                 let listing = if flags.contains('l') { LS_LONG } else { LS_SHORT };
                 self.output.extend_from_slice(listing.as_bytes());
-                self.output.extend_from_slice(b"\r\n$ ");
             }
+            
+            Some("hostname") => {
+                self.output.extend_from_slice(b"test-vm");
+            }
+            
+            // Echo unknown commands back to user
             _ => {
                 self.output.extend_from_slice(cmd.as_bytes());
-                self.output.extend_from_slice(b"\r\n$ ");
             }
         }
+        
+        self.output.extend_from_slice(b"\r\n$ ");
     }
 }
 
