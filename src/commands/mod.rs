@@ -54,7 +54,6 @@ pub fn execute(parts: &[&str], ctx: &CommandContext) -> Option<Vec<u8>> {
     let cmd: &dyn Command = match parts.first().copied() {
         Some("ls") => &ls::Ls,
         Some("hostname") => &hostname::Hostname,
-        Some("uname") => &uname::Uname,
         _ => return None,
     };
 
