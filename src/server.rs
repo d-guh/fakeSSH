@@ -31,7 +31,6 @@ impl Clone for Server {
             id: self.id,
             credentials: Arc::clone(&self.credentials),
             performer: self.performer.clone(),
-            // Each client session gets a fresh parser
             vte_parser: vte::Parser::new(),
         }
     }
@@ -54,11 +53,7 @@ impl RusshServer for Server {
 impl Handler for Server {
     type Error = russh::Error;
 
-    async fn auth_password(
-        &mut self,
-        user: &str,
-        password: &str,
-    ) -> Result<Auth, Self::Error> {
+    async fn auth_password(&mut self, user: &str, password: &str) -> Result<Auth, Self::Error> {
         match self.credentials.get(user) {
             Some(stored) if stored == password => {
                 log::info!("Accepted login for user '{user}'");
@@ -131,8 +126,12 @@ impl Handler for Server {
         self.performer.output.clear();
         self.performer.disconnect = false;
 
-        // Update parser state
-        self.vte_parser.advance(&mut self.performer, data);
+        // VTE is expecting 0x08 BS for backspace, however SSH emits 0x7F DEL for backspace, this will remap all 0x7F to 0x08
+        let mapped: Vec<u8> = data
+            .iter()
+            .map(|&b| if b == 0x7f { 0x08 } else { b })
+            .collect();
+        self.vte_parser.advance(&mut self.performer, &mapped);
 
         if !self.performer.output.is_empty() {
             session.data(channel, self.performer.output.clone())?;
