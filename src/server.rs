@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::sync::Arc;
 
 use russh::keys::ssh_key;
@@ -10,6 +11,7 @@ use crate::shell::ShellPerformer;
 pub struct Server {
     id: usize,
     credentials: Arc<HashMap<String, String>>,
+    peer_addr: Option<SocketAddr>,
     performer: ShellPerformer,
     vte_parser: vte::Parser,
 }
@@ -19,6 +21,7 @@ impl Server {
         Server {
             id: 0,
             credentials,
+            peer_addr: None,
             performer: ShellPerformer::default(),
             vte_parser: vte::Parser::new(),
         }
@@ -30,6 +33,7 @@ impl Clone for Server {
         Server {
             id: self.id,
             credentials: Arc::clone(&self.credentials),
+            peer_addr: self.peer_addr,
             performer: self.performer.clone(),
             vte_parser: vte::Parser::new(),
         }
@@ -39,8 +43,9 @@ impl Clone for Server {
 impl RusshServer for Server {
     type Handler = Self;
 
-    fn new_client(&mut self, _peer: Option<std::net::SocketAddr>) -> Self {
-        let s = self.clone();
+    fn new_client(&mut self, peer: Option<std::net::SocketAddr>) -> Self {
+        let mut s = self.clone();
+        s.peer_addr = peer;
         self.id += 1;
         s
     }
@@ -108,15 +113,22 @@ impl Handler for Server {
         channel: ChannelId,
         session: &mut Session,
     ) -> Result<(), Self::Error> {
-        let banner = b"Welcome to Ubuntu 22.04.3 LTS\r\n\
-                       Last login: Wed Jan 10 14:23:05 2024 from 192.168.1.1\r\n\
-                       $ "
-        .to_vec();
-        session.data(channel, banner)?;
+        let timestamp = chrono::Local::now()
+            .format("%a %b %e %H:%M:%S %Y");
+        let peer_ip = self
+            .peer_addr
+            .map(|a| a.ip().to_string())
+            .unwrap_or_else(|| "unknown".to_string());
+
+        let banner = format!(
+            "Welcome to Ubuntu 22.04.3 LTS\r\n\
+             Last login: {timestamp} from {peer_ip}\r\n\
+             $ "
+        );
+        session.data(channel, banner.into_bytes())?;
         Ok(())
     }
 
-    // Parse data packet
     async fn data(
         &mut self,
         channel: ChannelId,

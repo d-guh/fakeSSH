@@ -1,28 +1,7 @@
 use std::io::Write;
 use vte::Perform;
 
-const LS_SHORT: &str = "\x1b[01;34mDesktop\x1b[0m  \x1b[01;34mDocuments\x1b[0m  \
-    \x1b[01;34mDownloads\x1b[0m  \x1b[01;34mMusic\x1b[0m  \x1b[01;34mPictures\x1b[0m  \
-    \x1b[01;34mPublic\x1b[0m  \x1b[01;34msnap\x1b[0m  \x1b[01;34mTemplates\x1b[0m  \
-    \x1b[01;34mVideos\x1b[0m";
-
-const LS_LONG: &str = "total 60\r\n\
-    drwxr-x--- 11 ubuntu ubuntu 4096 Jan 10 14:23 \x1b[01;34m.\x1b[0m\r\n\
-    drwxr-xr-x  3 root   root   4096 Jan  5 09:15 \x1b[01;34m..\x1b[0m\r\n\
-    -rw-------  1 ubuntu ubuntu 1234 Jan 10 14:22 .bash_history\r\n\
-    -rw-r--r--  1 ubuntu ubuntu  220 Jan  5 09:15 .bash_logout\r\n\
-    -rw-r--r--  1 ubuntu ubuntu 3526 Jan  5 09:15 .bashrc\r\n\
-    -rw-r--r--  1 ubuntu ubuntu  807 Jan  5 09:15 .profile\r\n\
-    drwx------  2 ubuntu ubuntu 4096 Jan  5 09:15 \x1b[01;34m.ssh\x1b[0m\r\n\
-    drwxr-xr-x  2 ubuntu ubuntu 4096 Jan  5 09:15 \x1b[01;34mDesktop\x1b[0m\r\n\
-    drwxr-xr-x  2 ubuntu ubuntu 4096 Jan  5 09:15 \x1b[01;34mDocuments\x1b[0m\r\n\
-    drwxr-xr-x  2 ubuntu ubuntu 4096 Jan  5 09:15 \x1b[01;34mDownloads\x1b[0m\r\n\
-    drwxr-xr-x  2 ubuntu ubuntu 4096 Jan  5 09:15 \x1b[01;34mMusic\x1b[0m\r\n\
-    drwxr-xr-x  2 ubuntu ubuntu 4096 Jan  5 09:15 \x1b[01;34mPictures\x1b[0m\r\n\
-    drwxr-xr-x  2 ubuntu ubuntu 4096 Jan  5 09:15 \x1b[01;34mPublic\x1b[0m\r\n\
-    drwxrwxr-x  3 ubuntu ubuntu 4096 Jan  8 10:15 \x1b[01;34msnap\x1b[0m\r\n\
-    drwxr-xr-x  2 ubuntu ubuntu 4096 Jan  5 09:15 \x1b[01;34mTemplates\x1b[0m\r\n\
-    drwxr-xr-x  2 ubuntu ubuntu 4096 Jan  5 09:15 \x1b[01;34mVideos\x1b[0m";
+use crate::commands;
 
 #[derive(Clone, Default)]
 pub struct ShellPerformer {
@@ -40,31 +19,15 @@ impl ShellPerformer {
 
         let parts: Vec<&str> = cmd.split_whitespace().collect();
 
-        match parts.first().copied() {
-            None => {
-                self.output.extend_from_slice(b"$ ");
-            }
-            Some("ls") => {
-                let flags: String = parts[1..]
-                    .iter()
-                    .filter(|a| a.starts_with('-'))
-                    .flat_map(|a| a.chars())
-                    .collect();
+        if parts.is_empty() {
+            self.output.extend_from_slice(b"$ ");
+            return;
+        }
 
-                let listing = if flags.contains('l') {
-                    LS_LONG
-                } else {
-                    LS_SHORT
-                };
-                self.output.extend_from_slice(listing.as_bytes());
-            }
-            Some("hostname") => {
-                self.output.extend_from_slice(b"test-vm");
-            }
-            // Echo unknown commands back to user
-            _ => {
-                self.output.extend_from_slice(cmd.as_bytes());
-            }
+        if let Some(result) = commands::execute(&parts) {
+            self.output.extend_from_slice(&result);
+        } else {
+            self.output.extend_from_slice(cmd.as_bytes());
         }
         self.output.extend_from_slice(b"\r\n$ ");
     }
