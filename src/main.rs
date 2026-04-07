@@ -4,8 +4,8 @@ pub mod shell;
 
 use std::sync::Arc;
 
-use russh::keys::ssh_key::rand_core::OsRng;
 use russh::keys::ssh_key::LineEnding;
+use russh::keys::ssh_key::rand_core::OsRng;
 use russh::keys::{Algorithm, PrivateKey};
 use russh::server::Server as _;
 use tokio::net::TcpListener;
@@ -50,8 +50,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = Arc::new(config);
     let mut sh = Server::new(credentials);
 
-    let socket = TcpListener::bind(("0.0.0.0", 2222)).await?;
-    log::info!("Honeypot listening on 0.0.0.0:2222");
+    let listen = "0.0.0.0";
+    let port = 2222;
+
+    let socket = TcpListener::bind((listen, port)).await?;
+    log::info!("Honeypot listening on {}:{}", listen, port);
     sh.run_on_socket(config, &socket).await?;
     Ok(())
 }
