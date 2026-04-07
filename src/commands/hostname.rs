@@ -1,9 +1,9 @@
-use super::{Args, Command};
+use super::{Args, Command, CommandContext};
 
 pub struct Hostname;
 
 impl Command for Hostname {
-    fn run(&self, _args: &Args) -> Vec<u8> {
-        b"test-vm".to_vec()
+    fn run(&self, _args: &Args, ctx: &CommandContext) -> Vec<u8> {
+        ctx.hostname.as_bytes().to_vec()
     }
 }

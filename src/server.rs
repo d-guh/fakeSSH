@@ -6,6 +6,7 @@ use russh::keys::ssh_key;
 use russh::server::{Auth, Handler, Msg, Server as RusshServer, Session};
 use russh::{Channel, ChannelId, MethodKind, MethodSet, Pty};
 
+use crate::commands::CommandContext;
 use crate::shell::ShellPerformer;
 
 pub struct Server {
@@ -17,12 +18,15 @@ pub struct Server {
 }
 
 impl Server {
-    pub fn new(credentials: Arc<HashMap<String, String>>) -> Self {
+    pub fn new(
+        credentials: Arc<HashMap<String, String>>,
+        ctx: CommandContext,
+    ) -> Self {
         Server {
             id: 0,
             credentials,
             peer_addr: None,
-            performer: ShellPerformer::default(),
+            performer: ShellPerformer::new(ctx),
             vte_parser: vte::Parser::new(),
         }
     }
@@ -113,8 +117,7 @@ impl Handler for Server {
         channel: ChannelId,
         session: &mut Session,
     ) -> Result<(), Self::Error> {
-        let timestamp = chrono::Local::now()
-            .format("%a %b %e %H:%M:%S %Y");
+        let timestamp = chrono::Local::now().format("%a %b %e %H:%M:%S %Y");
         let peer_ip = self
             .peer_addr
             .map(|a| a.ip().to_string())

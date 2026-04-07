@@ -1,4 +1,4 @@
-use super::{Args, Command};
+use super::{Args, Command, CommandContext};
 
 const LS_SHORT: &str = "
     \x1b[01;34mDesktop\x1b[0m  \x1b[01;34mDocuments\x1b[0m  \
@@ -28,7 +28,7 @@ const LS_LONG: &str = "
 pub struct Ls;
 
 impl Command for Ls {
-    fn run(&self, args: &Args) -> Vec<u8> {
+    fn run(&self, args: &Args, _ctx: &CommandContext) -> Vec<u8> {
         let listing = if args.short_flags.contains(&'l') {
             LS_LONG
         } else {

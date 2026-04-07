@@ -1,7 +1,13 @@
 mod hostname;
 mod ls;
+mod uname;
 
 use std::collections::HashSet;
+
+#[derive(Clone)]
+pub struct CommandContext {
+    pub hostname: String,
+}
 
 pub struct Args {
     pub short_flags: HashSet<char>,
@@ -32,21 +38,26 @@ impl Args {
             }
         }
 
-        Args { short_flags, long_flags, positional }
+        Args {
+            short_flags,
+            long_flags,
+            positional,
+        }
     }
 }
 
 pub trait Command {
-    fn run(&self, args: &Args) -> Vec<u8>;
+    fn run(&self, args: &Args, ctx: &CommandContext) -> Vec<u8>;
 }
 
-pub fn execute(parts: &[&str]) -> Option<Vec<u8>> {
+pub fn execute(parts: &[&str], ctx: &CommandContext) -> Option<Vec<u8>> {
     let cmd: &dyn Command = match parts.first().copied() {
         Some("ls") => &ls::Ls,
         Some("hostname") => &hostname::Hostname,
+        Some("uname") => &uname::Uname,
         _ => return None,
     };
 
     let args = Args::parse(&parts[1..]);
-    Some(cmd.run(&args))
+    Some(cmd.run(&args, ctx))
 }

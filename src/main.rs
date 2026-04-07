@@ -2,6 +2,7 @@ pub mod commands;
 pub mod server;
 pub mod shell;
 
+use commands::CommandContext;
 use russh::keys::ssh_key::LineEnding;
 use russh::keys::ssh_key::rand_core::OsRng;
 use russh::keys::{Algorithm, PrivateKey};
@@ -21,21 +22,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cfg = Config::new("config.toml")?;
 
     let credentials = Arc::new(cfg.credentials);
+    let ctx = CommandContext {
+        hostname: cfg.server.hostname,
+    };
 
     let config = russh::server::Config {
-        inactivity_timeout: Some(std::time::Duration::from_secs(cfg.inactivity_timeout_secs)),
-        auth_rejection_time: std::time::Duration::from_secs(cfg.auth_rejection_time_secs),
-        auth_rejection_time_initial: Some(std::time::Duration::from_secs(
-            cfg.auth_rejection_time_initial_secs,
+        inactivity_timeout: Some(std::time::Duration::from_secs(
+            cfg.server.inactivity_timeout_secs,
         )),
-        keys: vec![get_or_create_host_key(&cfg.host_key_file)?],
+        auth_rejection_time: std::time::Duration::from_secs(
+            cfg.server.auth_rejection_time_secs,
+        ),
+        auth_rejection_time_initial: Some(std::time::Duration::from_secs(
+            cfg.server.auth_rejection_time_initial_secs,
+        )),
+        keys: vec![get_or_create_host_key(&cfg.server.host_key_file)?],
         ..Default::default()
     };
     let config = Arc::new(config);
-    let mut sh = Server::new(credentials);
+    let mut sh = Server::new(credentials, ctx);
 
-    let socket = TcpListener::bind((&*cfg.listen, cfg.port)).await?;
-    log::info!("Honeypot listening on {}:{}", cfg.listen, cfg.port);
+    let socket = TcpListener::bind((&*cfg.server.listen, cfg.server.port)).await?;
+    log::info!(
+        "Honeypot listening on {}:{}",
+        cfg.server.listen,
+        cfg.server.port
+    );
     sh.run_on_socket(config, &socket).await?;
     Ok(())
 }
@@ -59,16 +71,21 @@ pub fn get_or_create_host_key(path: &str) -> Result<PrivateKey, Box<dyn std::err
     }
 }
 
-
 #[derive(Deserialize)]
 pub struct Config {
+    pub server: ServerConfig,
+    pub credentials: HashMap<String, String>,
+}
+
+#[derive(Deserialize)]
+pub struct ServerConfig {
+    pub hostname: String,
     pub listen: String,
     pub port: u16,
     pub host_key_file: String,
     pub inactivity_timeout_secs: u64,
     pub auth_rejection_time_secs: u64,
     pub auth_rejection_time_initial_secs: u64,
-    pub credentials: HashMap<String, String>,
 }
 
 impl Config {
