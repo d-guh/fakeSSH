@@ -29,3 +29,9 @@ __MACOSX
 
 # Dotenv
 .env
+
+# Added by cargo
+
+/target
+
+host_key.pem
