@@ -63,6 +63,8 @@ impl Handler for Server {
         match self.credentials.get(user) {
             Some(stored) if stored == password => {
                 self.performer.ctx.username = user.to_string();
+                self.performer.ctx.login_time =
+                    chrono::Local::now().format("%Y-%m-%d %H:%M").to_string();
                 log::info!("Accepted login for user '{user}'");
                 Ok(Auth::Accept)
             }

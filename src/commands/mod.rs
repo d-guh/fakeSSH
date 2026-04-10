@@ -2,9 +2,13 @@ mod cd;
 mod clear;
 mod filesystem;
 mod hostname;
+mod id;
 mod ls;
 mod pwd;
 mod uname;
+mod w;
+mod who;
+mod whoami;
 
 use std::collections::{BTreeMap, HashSet};
 
@@ -14,6 +18,7 @@ use filesystem::{DirEntry, DirItem, FakeFileSystem, FileEntry};
 pub struct CommandContext {
     pub username: String,
     pub hostname: String,
+    pub login_time: String,
     pub fs: FakeFileSystem,
     pub cwd: Vec<String>,
 }
@@ -65,6 +70,10 @@ pub fn execute(parts: &[&str], ctx: &mut CommandContext) -> Option<Vec<u8>> {
         Some("ls") => &ls::Ls,
         Some("cd") => &cd::Cd,
         Some("pwd") => &pwd::Pwd,
+        Some("whoami") => &whoami::Whoami,
+        Some("who") => &who::Who,
+        Some("w") => &w::W,
+        Some("id") => &id::Id,
         Some("hostname") => &hostname::Hostname,
         Some("uname") => &uname::Uname,
         _ => return None,
@@ -81,6 +90,7 @@ impl CommandContext {
         CommandContext {
             username: "ubuntu".to_string(),
             hostname,
+            login_time: chrono::Local::now().format("%Y-%m-%d %H:%M").to_string(),
             fs,
             cwd,
         }
@@ -98,6 +108,36 @@ impl CommandContext {
             self.fs.prompt_path(&self.cwd)
         )
     }
+
+    pub fn user_profile(&self) -> UserProfile {
+        match self.username.as_str() {
+            "root" => UserProfile {
+                uid: 0,
+                gid: 0,
+                group_name: "root",
+                groups: &[(0, "root")],
+            },
+            "admin" => UserProfile {
+                uid: 1001,
+                gid: 1001,
+                group_name: "admin",
+                groups: &[(1001, "admin"), (27, "sudo"), (100, "users")],
+            },
+            _ => UserProfile {
+                uid: 1000,
+                gid: 1000,
+                group_name: "ubuntu",
+                groups: &[(1000, "ubuntu"), (27, "sudo"), (100, "users")],
+            },
+        }
+    }
+}
+
+pub struct UserProfile {
+    pub uid: u32,
+    pub gid: u32,
+    pub group_name: &'static str,
+    pub groups: &'static [(u32, &'static str)],
 }
 
 fn default_filesystem() -> FakeFileSystem {
