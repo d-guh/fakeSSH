@@ -62,6 +62,7 @@ impl Handler for Server {
     async fn auth_password(&mut self, user: &str, password: &str) -> Result<Auth, Self::Error> {
         match self.credentials.get(user) {
             Some(stored) if stored == password => {
+                self.performer.ctx.username = user.to_string();
                 log::info!("Accepted login for user '{user}'");
                 Ok(Auth::Accept)
             }

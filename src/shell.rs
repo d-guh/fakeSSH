@@ -39,7 +39,8 @@ impl ShellPerformer {
         if let Some(result) = commands::execute(&parts, &mut self.ctx) {
             self.output.extend_from_slice(&result);
         } else {
-            self.output.extend_from_slice(cmd.as_bytes());
+            self.output
+                .extend_from_slice(format!("-bash: {}: command not found", parts[0]).as_bytes());
         }
         self.output.extend_from_slice(b"\r\n");
         self.output.extend_from_slice(self.ctx.prompt().as_bytes());

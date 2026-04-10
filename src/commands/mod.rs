@@ -11,6 +11,7 @@ use filesystem::{DirEntry, DirItem, FakeFileSystem, FileEntry};
 
 #[derive(Clone)]
 pub struct CommandContext {
+    pub username: String,
     pub hostname: String,
     pub fs: FakeFileSystem,
     pub cwd: Vec<String>,
@@ -75,7 +76,12 @@ impl CommandContext {
     pub fn new(hostname: String) -> Self {
         let fs = default_filesystem();
         let cwd = vec!["home".to_string(), "ubuntu".to_string()];
-        CommandContext { hostname, fs, cwd }
+        CommandContext {
+            username: "ubuntu".to_string(),
+            hostname,
+            fs,
+            cwd,
+        }
     }
 
     pub fn pwd(&self) -> String {
@@ -83,7 +89,12 @@ impl CommandContext {
     }
 
     pub fn prompt(&self) -> String {
-        format!("{}$ ", self.fs.prompt_path(&self.cwd))
+        format!(
+            "\x1b[01;32m{}\x1b[0m@\x1b[01;32m{}\x1b[0m:\x1b[01;34m{}\x1b[0m$ ",
+            self.username,
+            self.hostname,
+            self.fs.prompt_path(&self.cwd)
+        )
     }
 }
 
