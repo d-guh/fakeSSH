@@ -3,7 +3,7 @@ use super::{Args, Command, CommandContext};
 pub struct Uname;
 
 impl Command for Uname {
-    fn run(&self, args: &Args, ctx: &CommandContext) -> Vec<u8> {
+    fn run(&self, args: &Args, ctx: &mut CommandContext) -> Vec<u8> {
         let mut kernel_name = false;
         let mut node_name = false;
         let mut kernel_release = false;
@@ -13,9 +13,7 @@ impl Command for Uname {
         let mut hardware_platform = false;
         let mut operating_system = false;
 
-        if args.short_flags.contains(&'a')
-            || args.long_flags.contains("all")
-        {
+        if args.short_flags.contains(&'a') || args.long_flags.contains("all") {
             kernel_name = true;
             node_name = true;
             kernel_release = true;
@@ -25,44 +23,28 @@ impl Command for Uname {
             hardware_platform = true;
             operating_system = true;
         }
-        if args.short_flags.contains(&'s')
-            || args.long_flags.contains("kernel-name")
-        {
+        if args.short_flags.contains(&'s') || args.long_flags.contains("kernel-name") {
             kernel_name = true;
         }
-        if args.short_flags.contains(&'n')
-            || args.long_flags.contains("nodename")
-        {
+        if args.short_flags.contains(&'n') || args.long_flags.contains("nodename") {
             node_name = true;
         }
-        if args.short_flags.contains(&'r')
-            || args.long_flags.contains("kernel-release")
-        {
+        if args.short_flags.contains(&'r') || args.long_flags.contains("kernel-release") {
             kernel_release = true;
         }
-        if args.short_flags.contains(&'v')
-            || args.long_flags.contains("kernel-version")
-        {
+        if args.short_flags.contains(&'v') || args.long_flags.contains("kernel-version") {
             kernel_version = true;
         }
-        if args.short_flags.contains(&'m')
-            || args.long_flags.contains("machine")
-        {
+        if args.short_flags.contains(&'m') || args.long_flags.contains("machine") {
             machine = true;
         }
-        if args.short_flags.contains(&'p')
-            || args.long_flags.contains("processor")
-        {
+        if args.short_flags.contains(&'p') || args.long_flags.contains("processor") {
             processor = true;
         }
-        if args.short_flags.contains(&'i')
-            || args.long_flags.contains("hardware-platform")
-        {
+        if args.short_flags.contains(&'i') || args.long_flags.contains("hardware-platform") {
             hardware_platform = true;
         }
-        if args.short_flags.contains(&'o')
-            || args.long_flags.contains("operating-system")
-        {
+        if args.short_flags.contains(&'o') || args.long_flags.contains("operating-system") {
             operating_system = true;
         }
 

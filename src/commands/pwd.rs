@@ -1,9 +1,9 @@
 use super::{Args, Command, CommandContext};
 
-pub struct Hostname;
+pub struct Pwd;
 
-impl Command for Hostname {
+impl Command for Pwd {
     fn run(&self, _args: &Args, ctx: &mut CommandContext) -> Vec<u8> {
-        ctx.hostname.as_bytes().to_vec()
+        ctx.pwd().into_bytes()
     }
 }

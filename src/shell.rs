@@ -32,16 +32,17 @@ impl ShellPerformer {
         let parts: Vec<&str> = cmd.split_whitespace().collect();
 
         if parts.is_empty() {
-            self.output.extend_from_slice(b"$ ");
+            self.output.extend_from_slice(self.ctx.prompt().as_bytes());
             return;
         }
 
-        if let Some(result) = commands::execute(&parts, &self.ctx) {
+        if let Some(result) = commands::execute(&parts, &mut self.ctx) {
             self.output.extend_from_slice(&result);
         } else {
             self.output.extend_from_slice(cmd.as_bytes());
         }
-        self.output.extend_from_slice(b"\r\n$ ");
+        self.output.extend_from_slice(b"\r\n");
+        self.output.extend_from_slice(self.ctx.prompt().as_bytes());
     }
 }
 
@@ -78,7 +79,8 @@ impl Perform for ShellPerformer {
             3 => {
                 self.line_buf.clear();
                 self.cursor_pos = 0;
-                self.output.extend_from_slice(b"^C\r\n$ ");
+                self.output.extend_from_slice(b"^C\r\n");
+                self.output.extend_from_slice(self.ctx.prompt().as_bytes());
             }
             // Ctrl-D
             4 => {

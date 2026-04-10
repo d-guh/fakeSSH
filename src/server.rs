@@ -18,10 +18,7 @@ pub struct Server {
 }
 
 impl Server {
-    pub fn new(
-        credentials: Arc<HashMap<String, String>>,
-        ctx: CommandContext,
-    ) -> Self {
+    pub fn new(credentials: Arc<HashMap<String, String>>, ctx: CommandContext) -> Self {
         Server {
             id: 0,
             credentials,
@@ -126,7 +123,8 @@ impl Handler for Server {
         let banner = format!(
             "Welcome to Ubuntu 22.04.3 LTS\r\n\
              Last login: {timestamp} from {peer_ip}\r\n\
-             $ "
+             {}",
+            self.performer.ctx.prompt()
         );
         session.data(channel, banner.into_bytes())?;
         Ok(())

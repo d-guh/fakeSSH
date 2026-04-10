@@ -22,17 +22,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cfg = Config::new("config.toml")?;
 
     let credentials = Arc::new(cfg.credentials);
-    let ctx = CommandContext {
-        hostname: cfg.server.hostname,
-    };
+    let ctx = CommandContext::new(cfg.server.hostname);
 
     let config = russh::server::Config {
         inactivity_timeout: Some(std::time::Duration::from_secs(
             cfg.server.inactivity_timeout_secs,
         )),
-        auth_rejection_time: std::time::Duration::from_secs(
-            cfg.server.auth_rejection_time_secs,
-        ),
+        auth_rejection_time: std::time::Duration::from_secs(cfg.server.auth_rejection_time_secs),
         auth_rejection_time_initial: Some(std::time::Duration::from_secs(
             cfg.server.auth_rejection_time_initial_secs,
         )),
