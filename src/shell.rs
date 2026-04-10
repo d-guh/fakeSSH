@@ -45,6 +45,11 @@ impl ShellPerformer {
         self.output.extend_from_slice(b"\r\n");
         self.output.extend_from_slice(self.ctx.prompt().as_bytes());
     }
+
+    fn clear_screen(&mut self) {
+        self.output.extend_from_slice(b"\x1b[2J\x1b[H");
+        self.output.extend_from_slice(self.ctx.prompt().as_bytes());
+    }
 }
 
 impl Perform for ShellPerformer {
@@ -86,6 +91,12 @@ impl Perform for ShellPerformer {
             // Ctrl-D
             4 => {
                 self.disconnect = true;
+            }
+            // Ctrl-L
+            12 => {
+                self.line_buf.clear();
+                self.cursor_pos = 0;
+                self.clear_screen();
             }
             // Backspace (^H) — 0x7F is mapped to 0x08 before advancing the parser
             8 => {

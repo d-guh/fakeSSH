@@ -1,4 +1,5 @@
 mod cd;
+mod clear;
 mod filesystem;
 mod hostname;
 mod ls;
@@ -60,6 +61,7 @@ pub trait Command {
 
 pub fn execute(parts: &[&str], ctx: &mut CommandContext) -> Option<Vec<u8>> {
     let cmd: &dyn Command = match parts.first().copied() {
+        Some("clear") => &clear::Clear,
         Some("ls") => &ls::Ls,
         Some("cd") => &cd::Cd,
         Some("pwd") => &pwd::Pwd,
