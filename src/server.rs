@@ -1,5 +1,8 @@
 use std::collections::HashMap;
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use russh::keys::ssh_key;
@@ -12,19 +15,50 @@ use crate::shell::ShellPerformer;
 pub struct Server {
     id: usize,
     credentials: Arc<HashMap<String, String>>,
+    ip_log_file: Arc<PathBuf>,
     peer_addr: Option<SocketAddr>,
     performer: ShellPerformer,
     vte_parser: vte::Parser,
 }
 
 impl Server {
-    pub fn new(credentials: Arc<HashMap<String, String>>, ctx: CommandContext) -> Self {
+    pub fn new(
+        credentials: Arc<HashMap<String, String>>,
+        ctx: CommandContext,
+        ip_log_file: Arc<PathBuf>,
+    ) -> Self {
         Server {
             id: 0,
             credentials,
+            ip_log_file,
             peer_addr: None,
             performer: ShellPerformer::new(ctx),
             vte_parser: vte::Parser::new(),
+        }
+    }
+
+    fn log_ip_event(&self, event: &str, user: Option<&str>) {
+        let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
+        let ip = self
+            .peer_addr
+            .map(|addr| addr.ip().to_string())
+            .unwrap_or_else(|| "unknown".to_string());
+        let user = user.unwrap_or("-");
+        let line = format!("{timestamp} event={event} ip={ip} user={user}\n");
+
+        match OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(self.ip_log_file.as_ref())
+        {
+            Ok(mut file) => {
+                if let Err(err) = file.write_all(line.as_bytes()) {
+                    log::error!("Failed writing IP log entry: {err}");
+                }
+            }
+            Err(err) => {
+                log::error!("Failed opening IP log file {:?}: {err}", self.ip_log_file);
+            }
         }
     }
 }
@@ -34,6 +68,7 @@ impl Clone for Server {
         Server {
             id: self.id,
             credentials: Arc::clone(&self.credentials),
+            ip_log_file: Arc::clone(&self.ip_log_file),
             peer_addr: self.peer_addr,
             performer: self.performer.clone(),
             vte_parser: vte::Parser::new(),
@@ -47,6 +82,7 @@ impl RusshServer for Server {
     fn new_client(&mut self, peer: Option<std::net::SocketAddr>) -> Self {
         let mut s = self.clone();
         s.peer_addr = peer;
+        s.log_ip_event("connect", None);
         self.id += 1;
         s
     }
@@ -65,10 +101,12 @@ impl Handler for Server {
                 self.performer.ctx.username = user.to_string();
                 self.performer.ctx.login_time =
                     chrono::Local::now().format("%Y-%m-%d %H:%M").to_string();
+                self.log_ip_event("auth_success", Some(user));
                 log::info!("Accepted login for user '{user}'");
                 Ok(Auth::Accept)
             }
             _ => {
+                self.log_ip_event("auth_failure", Some(user));
                 log::info!("Rejected login for user '{user}'");
                 Ok(Auth::Reject {
                     proceed_with_methods: None,
@@ -117,6 +155,7 @@ impl Handler for Server {
         channel: ChannelId,
         session: &mut Session,
     ) -> Result<(), Self::Error> {
+        self.log_ip_event("shell_open", Some(&self.performer.ctx.username));
         let timestamp = chrono::Local::now().format("%a %b %e %H:%M:%S %Y");
         let peer_ip = self
             .peer_addr

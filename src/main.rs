@@ -10,6 +10,7 @@ use russh::server::Server as _;
 use serde::Deserialize;
 use server::Server;
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 
@@ -23,6 +24,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let credentials = Arc::new(cfg.credentials);
     let ctx = CommandContext::new(cfg.server.hostname);
+    let ip_log_file = Arc::new(PathBuf::from(&cfg.server.ip_log_file));
 
     let config = russh::server::Config {
         inactivity_timeout: Some(std::time::Duration::from_secs(
@@ -36,7 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     };
     let config = Arc::new(config);
-    let mut sh = Server::new(credentials, ctx);
+    let mut sh = Server::new(credentials, ctx, ip_log_file);
 
     let socket = TcpListener::bind((&*cfg.server.listen, cfg.server.port)).await?;
     log::info!(
@@ -79,6 +81,7 @@ pub struct ServerConfig {
     pub listen: String,
     pub port: u16,
     pub host_key_file: String,
+    pub ip_log_file: String,
     pub inactivity_timeout_secs: u64,
     pub auth_rejection_time_secs: u64,
     pub auth_rejection_time_initial_secs: u64,

@@ -3,6 +3,7 @@ hostname = "test-vm"
 listen = "0.0.0.0"
 port = 2222
 host_key_file = "host_key.pem"
+ip_log_file = "ips.log"
 inactivity_timeout_secs = 3600
 auth_rejection_time_secs = 3
 auth_rejection_time_initial_secs = 0
