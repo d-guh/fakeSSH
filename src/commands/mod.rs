@@ -83,6 +83,12 @@ pub fn execute(parts: &[&str], ctx: &mut CommandContext) -> Option<Vec<u8>> {
     Some(cmd.run(&args, ctx))
 }
 
+pub fn command_names() -> &'static [&'static str] {
+    &[
+        "clear", "ls", "cd", "pwd", "whoami", "who", "w", "id", "hostname", "uname",
+    ]
+}
+
 impl CommandContext {
     pub fn new(hostname: String) -> Self {
         let fs = default_filesystem();

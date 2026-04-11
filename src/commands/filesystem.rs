@@ -168,6 +168,25 @@ impl FakeFileSystem {
         }
     }
 
+    pub fn complete_in_dir(&self, cwd: &[String], prefix: &str) -> Vec<String> {
+        let (dir_path, name_prefix, display_prefix) = self.completion_context(cwd, prefix);
+        let Some(dir) = self.get_dir(&dir_path) else {
+            return Vec::new();
+        };
+
+        dir.children
+            .iter()
+            .filter(|(name, _)| name.starts_with(&name_prefix))
+            .map(|(name, item)| {
+                let mut completion = format!("{display_prefix}{name}");
+                if matches!(item, DirItem::Dir(_)) {
+                    completion.push('/');
+                }
+                completion
+            })
+            .collect()
+    }
+
     fn resolve_listing_path(&self, cwd: &[String], target: &str) -> Result<Vec<String>, String> {
         let mut path = self.base_path(cwd, target);
         self.push_segments(&mut path, target);
@@ -219,6 +238,39 @@ impl FakeFileSystem {
 
     fn home_path(&self) -> Vec<String> {
         vec!["home".to_string(), "ubuntu".to_string()]
+    }
+
+    fn completion_context(&self, cwd: &[String], prefix: &str) -> (Vec<String>, String, String) {
+        let (base, tail) = match prefix.rsplit_once('/') {
+            Some((base, tail)) => (Some(base), tail),
+            None => (None, prefix),
+        };
+
+        let mut dir_path = match base {
+            Some(base) if base.starts_with('/') => Vec::new(),
+            Some(base) if base == "~" || base.starts_with("~/") => self.home_path(),
+            Some(_) | None => cwd.to_vec(),
+        };
+
+        if let Some(base) = base {
+            let trimmed = base
+                .strip_prefix("~/")
+                .or_else(|| base.strip_prefix('~'))
+                .unwrap_or(base);
+
+            for part in trimmed.split('/') {
+                match part {
+                    "" | "." => {}
+                    ".." => {
+                        dir_path.pop();
+                    }
+                    segment => dir_path.push(segment.to_string()),
+                }
+            }
+        }
+
+        let display_prefix = base.map(|value| format!("{value}/")).unwrap_or_default();
+        (dir_path, tail.to_string(), display_prefix)
     }
 
     fn get_item(&self, path: &[String]) -> Option<&DirItem> {

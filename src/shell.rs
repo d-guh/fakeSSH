@@ -11,6 +11,9 @@ pub struct ShellPerformer {
     pub(crate) output: Vec<u8>,
     pub(crate) disconnect: bool,
     pub(crate) cursor_pos: usize,
+    pub(crate) history: Vec<String>,
+    pub(crate) history_index: Option<usize>,
+    pub(crate) history_stash: String,
 }
 
 impl ShellPerformer {
@@ -21,13 +24,22 @@ impl ShellPerformer {
             output: Vec::new(),
             disconnect: false,
             cursor_pos: 0,
+            history: Vec::new(),
+            history_index: None,
+            history_stash: String::new(),
         }
     }
 
     fn process_command(&mut self) {
         let cmd = self.line_buf.trim().to_string();
+        if !cmd.is_empty() {
+            self.history.push(cmd.clone());
+        }
+
         self.line_buf.clear();
         self.cursor_pos = 0;
+        self.history_index = None;
+        self.history_stash.clear();
 
         let parts: Vec<&str> = cmd.split_whitespace().collect();
 
@@ -50,6 +62,100 @@ impl ShellPerformer {
         self.output.extend_from_slice(b"\x1b[2J\x1b[H");
         self.output.extend_from_slice(self.ctx.prompt().as_bytes());
     }
+
+    fn set_line(&mut self, new_line: String) {
+        self.output.extend_from_slice(b"\r");
+        self.output.extend_from_slice(b"\x1b[2K");
+        self.output.extend_from_slice(self.ctx.prompt().as_bytes());
+        self.output.extend_from_slice(new_line.as_bytes());
+        self.line_buf = new_line;
+        self.cursor_pos = self.line_buf.chars().count();
+    }
+
+    fn history_up(&mut self) {
+        if self.history.is_empty() {
+            return;
+        }
+
+        match self.history_index {
+            None => {
+                self.history_stash = self.line_buf.clone();
+                self.history_index = Some(self.history.len() - 1);
+            }
+            Some(0) => {}
+            Some(idx) => {
+                self.history_index = Some(idx - 1);
+            }
+        }
+
+        if let Some(idx) = self.history_index {
+            self.set_line(self.history[idx].clone());
+        }
+    }
+
+    fn history_down(&mut self) {
+        let Some(idx) = self.history_index else {
+            return;
+        };
+
+        if idx + 1 < self.history.len() {
+            self.history_index = Some(idx + 1);
+            self.set_line(self.history[idx + 1].clone());
+        } else {
+            self.history_index = None;
+            self.set_line(self.history_stash.clone());
+        }
+    }
+
+    fn complete_current_token(&mut self) {
+        let cursor_byte = self
+            .line_buf
+            .char_indices()
+            .nth(self.cursor_pos)
+            .map(|(i, _)| i)
+            .unwrap_or(self.line_buf.len());
+
+        let left = &self.line_buf[..cursor_byte];
+        let token_start = left
+            .rfind(char::is_whitespace)
+            .map(|idx| idx + 1)
+            .unwrap_or(0);
+        let token = &self.line_buf[token_start..cursor_byte];
+        if token.is_empty() && token_start != 0 {
+            return;
+        }
+
+        let is_first_token = token_start == 0 && !left[..token_start].contains(char::is_whitespace);
+        let matches = if is_first_token {
+            commands::command_names()
+                .iter()
+                .filter(|name| name.starts_with(token))
+                .map(|name| (*name).to_string())
+                .collect::<Vec<_>>()
+        } else {
+            self.ctx.fs.complete_in_dir(&self.ctx.cwd, token)
+        };
+
+        if matches.is_empty() {
+            return;
+        }
+
+        let replacement = longest_common_prefix(&matches);
+        if replacement.len() > token.len() {
+            let mut new_line = self.line_buf.clone();
+            new_line.replace_range(token_start..cursor_byte, &replacement);
+            self.set_line(new_line);
+        } else if matches.len() == 1 {
+            let mut completed = matches[0].clone();
+            if is_first_token || !completed.ends_with('/') {
+                completed.push(' ');
+            }
+
+            let mut new_line = self.line_buf.clone();
+            new_line.replace_range(token_start..cursor_byte, &completed);
+            self.set_line(new_line);
+        }
+    }
 }
 
 impl Perform for ShellPerformer {
@@ -64,6 +170,7 @@ impl Perform for ShellPerformer {
 
         self.line_buf.insert(byte_idx, c);
         self.cursor_pos += 1;
+        self.history_index = None;
 
         // Echo the inserted char
         let mut buf = [0u8; 4];
@@ -122,6 +229,11 @@ impl Perform for ShellPerformer {
                 // Move cursor back by tail length + 1 (for the erased char)
                 let n = tail.chars().count() + 1;
                 write!(self.output, "\x1b[{}D", n).unwrap();
+                self.history_index = None;
+            }
+            // Tab
+            9 => {
+                self.complete_current_token();
             }
             // Return
             13 => {
@@ -140,6 +252,14 @@ impl Perform for ShellPerformer {
         action: char,
     ) {
         match action {
+            // Up arrow
+            'A' => {
+                self.history_up();
+            }
+            // Down arrow
+            'B' => {
+                self.history_down();
+            }
             // Left arrow
             'D' => {
                 if self.cursor_pos > 0 {
@@ -174,9 +294,31 @@ impl Perform for ShellPerformer {
                     // Move cursor back by tail length + 1
                     let n = tail.chars().count() + 1;
                     write!(self.output, "\x1b[{}D", n).unwrap();
+                    self.history_index = None;
                 }
             }
             _ => {}
         }
     }
+}
+
+fn longest_common_prefix(values: &[String]) -> String {
+    let Some(first) = values.first() else {
+        return String::new();
+    };
+
+    let mut prefix = first.clone();
+    for value in &values[1..] {
+        let shared_len = prefix
+            .chars()
+            .zip(value.chars())
+            .take_while(|(a, b)| a == b)
+            .count();
+        prefix = prefix.chars().take(shared_len).collect();
+        if prefix.is_empty() {
+            break;
+        }
+    }
+
+    prefix
 }
