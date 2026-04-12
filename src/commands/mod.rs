@@ -259,89 +259,482 @@ fn default_filesystem() -> FakeFileSystem {
     ]);
     ubuntu_children.extend(home_dirs);
 
-    let root = DirEntry::new("drwxr-xr-x", "root", "root", 4096, "Jan  5 09:15").with_children(
-        BTreeMap::from([
-            (
-                "home".to_string(),
-                DirItem::Dir(
-                    DirEntry::new("drwxr-xr-x", "root", "root", 4096, "Jan  5 09:15")
-                        .with_children(BTreeMap::from([(
-                            "ubuntu".to_string(),
-                            DirItem::Dir(
-                                DirEntry::new(
-                                    "drwxr-x---",
-                                    "ubuntu",
-                                    "ubuntu",
-                                    4096,
-                                    "Jan 10 14:23",
-                                )
-                                .with_children(ubuntu_children),
-                            ),
-                        )])),
+    let root =
+        DirEntry::new("drwxr-xr-x", "root", "root", 4096, "Jan  5 09:15").with_children(
+            BTreeMap::from([
+                (
+                    "bin".to_string(),
+                    DirItem::Dir(
+                        DirEntry::new("drwxr-xr-x", "root", "root", 4096, "Jan  5 09:15")
+                            .with_children(BTreeMap::from([
+                                (
+                                    "bash".to_string(),
+                                    DirItem::File(FileEntry::new(
+                                        "-rwxr-xr-x",
+                                        "root",
+                                        "root",
+                                        1265648,
+                                        "Jan  5 09:15",
+                                    )),
+                                ),
+                                (
+                                    "ls".to_string(),
+                                    DirItem::File(FileEntry::new(
+                                        "-rwxr-xr-x",
+                                        "root",
+                                        "root",
+                                        151344,
+                                        "Jan  5 09:15",
+                                    )),
+                                ),
+                            ])),
+                    ),
                 ),
-            ),
-            (
-                "etc".to_string(),
-                DirItem::Dir(
-                    DirEntry::new("drwxr-xr-x", "root", "root", 4096, "Jan  5 09:15")
-                        .with_children(BTreeMap::from([
-                            (
-                                "passwd".to_string(),
-                                DirItem::File(FileEntry::new(
-                                    "-rw-r--r--",
-                                    "root",
-                                    "root",
-                                    1842,
-                                    "Jan  5 09:15",
-                                )),
-                            ),
-                            (
-                                "ssh".to_string(),
+                (
+                    "boot".to_string(),
+                    DirItem::Dir(
+                        DirEntry::new("drwxr-xr-x", "root", "root", 4096, "Jan  5 09:15")
+                            .with_children(BTreeMap::from([
+                                (
+                                    "grub".to_string(),
+                                    DirItem::Dir(DirEntry::new(
+                                        "drwxr-xr-x",
+                                        "root",
+                                        "root",
+                                        4096,
+                                        "Jan  5 09:15",
+                                    )),
+                                ),
+                                (
+                                    "vmlinuz-6.8.0-generic".to_string(),
+                                    DirItem::File(FileEntry::new(
+                                        "-rw-r--r--",
+                                        "root",
+                                        "root",
+                                        14897152,
+                                        "Jan  5 09:15",
+                                    )),
+                                ),
+                            ])),
+                    ),
+                ),
+                (
+                    "dev".to_string(),
+                    DirItem::Dir(
+                        DirEntry::new("drwxr-xr-x", "root", "root", 4096, "Jan 10 14:21")
+                            .with_children(BTreeMap::from([
+                                (
+                                    "null".to_string(),
+                                    DirItem::File(FileEntry::new(
+                                        "crw-rw-rw-",
+                                        "root",
+                                        "root",
+                                        0,
+                                        "Jan 10 14:21",
+                                    )),
+                                ),
+                                (
+                                    "pts".to_string(),
+                                    DirItem::Dir(DirEntry::new(
+                                        "drwxr-xr-x",
+                                        "root",
+                                        "root",
+                                        4096,
+                                        "Jan 10 14:21",
+                                    )),
+                                ),
+                                (
+                                    "shm".to_string(),
+                                    DirItem::Dir(DirEntry::new(
+                                        "drwxrwxrwt",
+                                        "root",
+                                        "root",
+                                        4096,
+                                        "Jan 10 14:21",
+                                    )),
+                                ),
+                            ])),
+                    ),
+                ),
+                (
+                    "etc".to_string(),
+                    DirItem::Dir(
+                        DirEntry::new("drwxr-xr-x", "root", "root", 4096, "Jan  5 09:15")
+                            .with_children(BTreeMap::from([
+                                (
+                                    "fstab".to_string(),
+                                    DirItem::File(FileEntry::new(
+                                        "-rw-r--r--",
+                                        "root",
+                                        "root",
+                                        642,
+                                        "Jan  5 09:15",
+                                    )),
+                                ),
+                                (
+                                    "hostname".to_string(),
+                                    DirItem::File(FileEntry::new(
+                                        "-rw-r--r--",
+                                        "root",
+                                        "root",
+                                        8,
+                                        "Jan  5 09:15",
+                                    )),
+                                ),
+                                (
+                                    "passwd".to_string(),
+                                    DirItem::File(FileEntry::new(
+                                        "-rw-r--r--",
+                                        "root",
+                                        "root",
+                                        1842,
+                                        "Jan  5 09:15",
+                                    )),
+                                ),
+                                (
+                                    "ssh".to_string(),
+                                    DirItem::Dir(DirEntry::new(
+                                        "drwxr-xr-x",
+                                        "root",
+                                        "root",
+                                        4096,
+                                        "Jan  5 09:15",
+                                    )),
+                                ),
+                            ])),
+                    ),
+                ),
+                (
+                    "home".to_string(),
+                    DirItem::Dir(
+                        DirEntry::new("drwxr-xr-x", "root", "root", 4096, "Jan  5 09:15")
+                            .with_children(BTreeMap::from([(
+                                "ubuntu".to_string(),
+                                DirItem::Dir(
+                                    DirEntry::new(
+                                        "drwxr-x---",
+                                        "ubuntu",
+                                        "ubuntu",
+                                        4096,
+                                        "Jan 10 14:23",
+                                    )
+                                    .with_children(ubuntu_children),
+                                ),
+                            )])),
+                    ),
+                ),
+                (
+                    "lib".to_string(),
+                    DirItem::Dir(DirEntry::new(
+                        "drwxr-xr-x",
+                        "root",
+                        "root",
+                        4096,
+                        "Jan  5 09:15",
+                    )),
+                ),
+                (
+                    "lib64".to_string(),
+                    DirItem::Dir(DirEntry::new(
+                        "drwxr-xr-x",
+                        "root",
+                        "root",
+                        4096,
+                        "Jan  5 09:15",
+                    )),
+                ),
+                (
+                    "media".to_string(),
+                    DirItem::Dir(DirEntry::new(
+                        "drwxr-xr-x",
+                        "root",
+                        "root",
+                        4096,
+                        "Jan  5 09:15",
+                    )),
+                ),
+                (
+                    "mnt".to_string(),
+                    DirItem::Dir(DirEntry::new(
+                        "drwxr-xr-x",
+                        "root",
+                        "root",
+                        4096,
+                        "Jan  5 09:15",
+                    )),
+                ),
+                (
+                    "opt".to_string(),
+                    DirItem::Dir(
+                        DirEntry::new("drwxr-xr-x", "root", "root", 4096, "Jan  5 09:15")
+                            .with_children(BTreeMap::from([(
+                                "containerd".to_string(),
                                 DirItem::Dir(DirEntry::new(
                                     "drwxr-xr-x",
                                     "root",
                                     "root",
                                     4096,
+                                    "Jan  8 10:15",
+                                )),
+                            )])),
+                    ),
+                ),
+                (
+                    "proc".to_string(),
+                    DirItem::Dir(
+                        DirEntry::new("dr-xr-xr-x", "root", "root", 0, "Jan 10 14:23")
+                            .with_children(BTreeMap::from([
+                                (
+                                    "cpuinfo".to_string(),
+                                    DirItem::File(FileEntry::new(
+                                        "-r--r--r--",
+                                        "root",
+                                        "root",
+                                        0,
+                                        "Jan 10 14:23",
+                                    )),
+                                ),
+                                (
+                                    "meminfo".to_string(),
+                                    DirItem::File(FileEntry::new(
+                                        "-r--r--r--",
+                                        "root",
+                                        "root",
+                                        0,
+                                        "Jan 10 14:23",
+                                    )),
+                                ),
+                                (
+                                    "sys".to_string(),
+                                    DirItem::Dir(DirEntry::new(
+                                        "dr-xr-xr-x",
+                                        "root",
+                                        "root",
+                                        0,
+                                        "Jan 10 14:23",
+                                    )),
+                                ),
+                            ])),
+                    ),
+                ),
+                (
+                    "root".to_string(),
+                    DirItem::Dir(
+                        DirEntry::new("drwx------", "root", "root", 4096, "Jan 10 14:18")
+                            .with_children(BTreeMap::from([
+                                (
+                                    ".bash_history".to_string(),
+                                    DirItem::File(FileEntry::new(
+                                        "-rw-------",
+                                        "root",
+                                        "root",
+                                        2048,
+                                        "Jan 10 14:18",
+                                    )),
+                                ),
+                                (
+                                    ".ssh".to_string(),
+                                    DirItem::Dir(DirEntry::new(
+                                        "drwx------",
+                                        "root",
+                                        "root",
+                                        4096,
+                                        "Jan  5 09:15",
+                                    )),
+                                ),
+                            ])),
+                    ),
+                ),
+                (
+                    "run".to_string(),
+                    DirItem::Dir(
+                        DirEntry::new("drwxr-xr-x", "root", "root", 4096, "Jan 10 14:21")
+                            .with_children(BTreeMap::from([(
+                                "systemd".to_string(),
+                                DirItem::Dir(DirEntry::new(
+                                    "drwxr-xr-x",
+                                    "root",
+                                    "root",
+                                    4096,
+                                    "Jan 10 14:21",
+                                )),
+                            )])),
+                    ),
+                ),
+                (
+                    "sbin".to_string(),
+                    DirItem::Dir(
+                        DirEntry::new("drwxr-xr-x", "root", "root", 4096, "Jan  5 09:15")
+                            .with_children(BTreeMap::from([(
+                                "init".to_string(),
+                                DirItem::File(FileEntry::new(
+                                    "-rwxr-xr-x",
+                                    "root",
+                                    "root",
+                                    92544,
                                     "Jan  5 09:15",
                                 )),
-                            ),
-                        ])),
+                            )])),
+                    ),
                 ),
-            ),
-            (
-                "var".to_string(),
-                DirItem::Dir(
-                    DirEntry::new("drwxr-xr-x", "root", "root", 4096, "Jan  5 09:15")
-                        .with_children(BTreeMap::from([(
-                            "log".to_string(),
-                            DirItem::Dir(
-                                DirEntry::new("drwxr-xr-x", "syslog", "adm", 4096, "Jan 10 14:23")
-                                    .with_children(BTreeMap::from([(
-                                        "auth.log".to_string(),
-                                        DirItem::File(FileEntry::new(
-                                            "-rw-r-----",
+                (
+                    "srv".to_string(),
+                    DirItem::Dir(DirEntry::new(
+                        "drwxr-xr-x",
+                        "root",
+                        "root",
+                        4096,
+                        "Jan  5 09:15",
+                    )),
+                ),
+                (
+                    "sys".to_string(),
+                    DirItem::Dir(
+                        DirEntry::new("dr-xr-xr-x", "root", "root", 0, "Jan 10 14:23")
+                            .with_children(BTreeMap::from([(
+                                "kernel".to_string(),
+                                DirItem::Dir(DirEntry::new(
+                                    "dr-xr-xr-x",
+                                    "root",
+                                    "root",
+                                    0,
+                                    "Jan 10 14:23",
+                                )),
+                            )])),
+                    ),
+                ),
+                (
+                    "tmp".to_string(),
+                    DirItem::Dir(DirEntry::new(
+                        "drwxrwxrwt",
+                        "root",
+                        "root",
+                        4096,
+                        "Jan 10 14:20",
+                    )),
+                ),
+                (
+                    "usr".to_string(),
+                    DirItem::Dir(
+                        DirEntry::new("drwxr-xr-x", "root", "root", 4096, "Jan  5 09:15")
+                            .with_children(BTreeMap::from([
+                                (
+                                    "bin".to_string(),
+                                    DirItem::Dir(DirEntry::new(
+                                        "drwxr-xr-x",
+                                        "root",
+                                        "root",
+                                        4096,
+                                        "Jan  5 09:15",
+                                    )),
+                                ),
+                                (
+                                    "lib".to_string(),
+                                    DirItem::Dir(DirEntry::new(
+                                        "drwxr-xr-x",
+                                        "root",
+                                        "root",
+                                        4096,
+                                        "Jan  5 09:15",
+                                    )),
+                                ),
+                                (
+                                    "local".to_string(),
+                                    DirItem::Dir(DirEntry::new(
+                                        "drwxr-xr-x",
+                                        "root",
+                                        "root",
+                                        4096,
+                                        "Jan  5 09:15",
+                                    )),
+                                ),
+                                (
+                                    "sbin".to_string(),
+                                    DirItem::Dir(DirEntry::new(
+                                        "drwxr-xr-x",
+                                        "root",
+                                        "root",
+                                        4096,
+                                        "Jan  5 09:15",
+                                    )),
+                                ),
+                                (
+                                    "share".to_string(),
+                                    DirItem::Dir(DirEntry::new(
+                                        "drwxr-xr-x",
+                                        "root",
+                                        "root",
+                                        4096,
+                                        "Jan  5 09:15",
+                                    )),
+                                ),
+                            ])),
+                    ),
+                ),
+                (
+                    "var".to_string(),
+                    DirItem::Dir(
+                        DirEntry::new("drwxr-xr-x", "root", "root", 4096, "Jan  5 09:15")
+                            .with_children(BTreeMap::from([
+                                (
+                                    "cache".to_string(),
+                                    DirItem::Dir(DirEntry::new(
+                                        "drwxr-xr-x",
+                                        "root",
+                                        "root",
+                                        4096,
+                                        "Jan 10 14:22",
+                                    )),
+                                ),
+                                (
+                                    "lib".to_string(),
+                                    DirItem::Dir(DirEntry::new(
+                                        "drwxr-xr-x",
+                                        "root",
+                                        "root",
+                                        4096,
+                                        "Jan 10 14:22",
+                                    )),
+                                ),
+                                (
+                                    "log".to_string(),
+                                    DirItem::Dir(
+                                        DirEntry::new(
+                                            "drwxr-xr-x",
                                             "syslog",
                                             "adm",
-                                            24576,
+                                            4096,
                                             "Jan 10 14:23",
-                                        )),
-                                    )])),
-                            ),
-                        )])),
+                                        )
+                                        .with_children(
+                                            BTreeMap::from([(
+                                                "auth.log".to_string(),
+                                                DirItem::File(FileEntry::new(
+                                                    "-rw-r-----",
+                                                    "syslog",
+                                                    "adm",
+                                                    24576,
+                                                    "Jan 10 14:23",
+                                                )),
+                                            )]),
+                                        ),
+                                    ),
+                                ),
+                                (
+                                    "tmp".to_string(),
+                                    DirItem::Dir(DirEntry::new(
+                                        "drwxrwxrwt",
+                                        "root",
+                                        "root",
+                                        4096,
+                                        "Jan 10 14:22",
+                                    )),
+                                ),
+                            ])),
+                    ),
                 ),
-            ),
-            (
-                "tmp".to_string(),
-                DirItem::Dir(DirEntry::new(
-                    "drwxrwxrwt",
-                    "root",
-                    "root",
-                    4096,
-                    "Jan 10 14:20",
-                )),
-            ),
-        ]),
-    );
+            ]),
+        );
 
     FakeFileSystem::new(root)
 }
