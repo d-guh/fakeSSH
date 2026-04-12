@@ -1,5 +1,6 @@
 mod cd;
 mod clear;
+mod exit;
 mod filesystem;
 mod hostname;
 mod id;
@@ -19,6 +20,7 @@ pub struct CommandContext {
     pub username: String,
     pub hostname: String,
     pub login_time: String,
+    pub should_exit: bool,
     pub fs: FakeFileSystem,
     pub cwd: Vec<String>,
 }
@@ -67,6 +69,7 @@ pub trait Command {
 pub fn execute(parts: &[&str], ctx: &mut CommandContext) -> Option<Vec<u8>> {
     let cmd: &dyn Command = match parts.first().copied() {
         Some("clear") => &clear::Clear,
+        Some("exit") | Some("logout") => &exit::Exit,
         Some("ls") => &ls::Ls,
         Some("cd") => &cd::Cd,
         Some("pwd") => &pwd::Pwd,
@@ -85,7 +88,8 @@ pub fn execute(parts: &[&str], ctx: &mut CommandContext) -> Option<Vec<u8>> {
 
 pub fn command_names() -> &'static [&'static str] {
     &[
-        "clear", "ls", "cd", "pwd", "whoami", "who", "w", "id", "hostname", "uname",
+        "clear", "ls", "cd", "pwd", "whoami", "who", "w", "id", "hostname", "uname", "exit",
+        "logout",
     ]
 }
 
@@ -97,6 +101,7 @@ impl CommandContext {
             username: "ubuntu".to_string(),
             hostname,
             login_time: chrono::Local::now().format("%Y-%m-%d %H:%M").to_string(),
+            should_exit: false,
             fs,
             cwd,
         }

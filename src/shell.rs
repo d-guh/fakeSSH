@@ -55,6 +55,10 @@ impl ShellPerformer {
                 .extend_from_slice(format!("-bash: {}: command not found", parts[0]).as_bytes());
         }
         self.output.extend_from_slice(b"\r\n");
+        if self.ctx.should_exit {
+            self.disconnect = true;
+            return;
+        }
         self.output.extend_from_slice(self.ctx.prompt().as_bytes());
     }
 
