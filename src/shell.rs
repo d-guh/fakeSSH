@@ -41,18 +41,25 @@ impl ShellPerformer {
         self.history_index = None;
         self.history_stash.clear();
 
-        let parts: Vec<&str> = cmd.split_whitespace().collect();
+        let raw_parts: Vec<&str> = cmd.split_whitespace().collect();
 
-        if parts.is_empty() {
+        if raw_parts.is_empty() {
             self.output.extend_from_slice(self.ctx.prompt().as_bytes());
             return;
         }
 
+        let expanded_parts = commands::expand_alias(&raw_parts);
+        let parts = expanded_parts
+            .iter()
+            .map(|part| part.as_str())
+            .collect::<Vec<_>>();
+
         if let Some(result) = commands::execute(&parts, &mut self.ctx) {
             self.output.extend_from_slice(&result);
         } else {
-            self.output
-                .extend_from_slice(format!("-bash: {}: command not found", parts[0]).as_bytes());
+            self.output.extend_from_slice(
+                format!("-bash: {}: command not found", raw_parts[0]).as_bytes(),
+            );
         }
         self.output.extend_from_slice(b"\r\n");
         if self.ctx.should_exit {
@@ -131,10 +138,10 @@ impl ShellPerformer {
 
         let is_first_token = token_start == 0 && !left[..token_start].contains(char::is_whitespace);
         let matches = if is_first_token {
-            commands::command_names()
-                .iter()
+            commands::shell_word_names()
+                .into_iter()
                 .filter(|name| name.starts_with(token))
-                .map(|name| (*name).to_string())
+                .map(|name| name.to_string())
                 .collect::<Vec<_>>()
         } else {
             self.ctx.fs.complete_in_dir(&self.ctx.cwd, token)

@@ -93,6 +93,42 @@ pub fn command_names() -> &'static [&'static str] {
     ]
 }
 
+pub fn alias_names() -> &'static [&'static str] {
+    &["l", "ll", "la", "lla", "..", "...", "....", "cls"]
+}
+
+pub fn shell_word_names() -> Vec<&'static str> {
+    let mut names = Vec::with_capacity(command_names().len() + alias_names().len());
+    names.extend_from_slice(command_names());
+    names.extend_from_slice(alias_names());
+    names
+}
+
+pub fn expand_alias(parts: &[&str]) -> Vec<String> {
+    let Some(first) = parts.first().copied() else {
+        return Vec::new();
+    };
+
+    let expanded = match first {
+        "l" => &["ls"][..],
+        "ll" => &["ls", "-l"][..],
+        "la" => &["ls", "-a"][..],
+        "lla" => &["ls", "-la"][..],
+        ".." => &["cd", ".."][..],
+        "..." => &["cd", "../.."][..],
+        "...." => &["cd", "../../.."][..],
+        "cls" => &["clear"][..],
+        _ => return parts.iter().map(|part| (*part).to_string()).collect(),
+    };
+
+    let mut resolved = expanded
+        .iter()
+        .map(|part| (*part).to_string())
+        .collect::<Vec<_>>();
+    resolved.extend(parts.iter().skip(1).map(|part| (*part).to_string()));
+    resolved
+}
+
 impl CommandContext {
     pub fn new(hostname: String) -> Self {
         let fs = default_filesystem();
