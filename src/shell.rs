@@ -1,4 +1,7 @@
+use std::fs::OpenOptions;
 use std::io::Write;
+use std::path::PathBuf;
+use std::sync::Arc;
 use vte::Perform;
 
 use crate::commands;
@@ -20,6 +23,8 @@ pub struct ShellPerformer {
     pub(crate) history: Vec<String>,
     pub(crate) history_index: Option<usize>,
     pub(crate) history_stash: String,
+    pub(crate) peer_ip: Option<String>,
+    pub(crate) ip_log_file: Option<Arc<PathBuf>>,
 }
 
 impl ShellPerformer {
@@ -33,7 +38,14 @@ impl ShellPerformer {
             history: Vec::new(),
             history_index: None,
             history_stash: String::new(),
+            peer_ip: None,
+            ip_log_file: None,
         }
+    }
+
+    pub fn set_logging_context(&mut self, peer_ip: Option<String>, ip_log_file: Arc<PathBuf>) {
+        self.peer_ip = peer_ip;
+        self.ip_log_file = Some(ip_log_file);
     }
 
     fn process_command(&mut self) {
@@ -48,6 +60,9 @@ impl ShellPerformer {
         self.history_stash.clear();
 
         let result = run_command_line(&mut self.ctx, &cmd, true);
+        if !cmd.is_empty() {
+            self.log_command("interactive", &cmd, result.exit_status);
+        }
         if result.output.is_empty() && cmd.is_empty() {
             self.output.extend_from_slice(self.ctx.prompt().as_bytes());
             return;
@@ -59,6 +74,44 @@ impl ShellPerformer {
             return;
         }
         self.output.extend_from_slice(self.ctx.prompt().as_bytes());
+    }
+
+    fn log_command(&self, mode: &str, command: &str, exit_status: u32) {
+        let peer_ip = self.peer_ip.as_deref().unwrap_or("unknown");
+        let command = escape_log_value(command);
+        log::info!(
+            "Command from {} as '{}' via {}: {:?} (exit {})",
+            peer_ip,
+            self.ctx.username,
+            mode,
+            command,
+            exit_status
+        );
+
+        let Some(ip_log_file) = &self.ip_log_file else {
+            return;
+        };
+
+        let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
+        let line = format!(
+            "{timestamp} event=command ip={} user={} mode={} exit_status={} command=\"{}\"\n",
+            peer_ip, self.ctx.username, mode, exit_status, command
+        );
+
+        match OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(ip_log_file.as_ref())
+        {
+            Ok(mut file) => {
+                if let Err(err) = file.write_all(line.as_bytes()) {
+                    log::error!("Failed writing command log entry: {err}");
+                }
+            }
+            Err(err) => {
+                log::error!("Failed opening IP log file {:?}: {err}", ip_log_file);
+            }
+        }
     }
 
     fn clear_screen(&mut self) {
@@ -366,4 +419,12 @@ fn longest_common_prefix(values: &[String]) -> String {
     }
 
     prefix
+}
+
+fn escape_log_value(value: &str) -> String {
+    value
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\r', "\\r")
+        .replace('\n', "\\n")
 }

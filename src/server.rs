@@ -21,6 +21,7 @@ pub struct Server {
     ip_log_file: Arc<PathBuf>,
     peer_addr: Option<SocketAddr>,
     failed_password_attempts: usize,
+    disconnect_logged: bool,
     performer: ShellPerformer,
     vte_parser: vte::Parser,
 }
@@ -42,19 +43,37 @@ impl Server {
             ip_log_file,
             peer_addr: None,
             failed_password_attempts: 0,
+            disconnect_logged: false,
             performer: ShellPerformer::new(ctx),
             vte_parser: vte::Parser::new(),
         }
     }
 
     fn log_ip_event(&self, event: &str, user: Option<&str>) {
+        self.log_ip_event_with_details(event, user, &[]);
+    }
+
+    fn log_ip_event_with_details(
+        &self,
+        event: &str,
+        user: Option<&str>,
+        details: &[(&str, String)],
+    ) {
         let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
         let ip = self
             .peer_addr
             .map(|addr| addr.ip().to_string())
             .unwrap_or_else(|| "unknown".to_string());
         let user = user.unwrap_or("-");
-        let line = format!("{timestamp} event={event} ip={ip} user={user}\n");
+        let detail_suffix = if details.is_empty() {
+            String::new()
+        } else {
+            details
+                .iter()
+                .map(|(key, value)| format!(r#" {}="{}""#, key, escape_log_value(value)))
+                .collect::<String>()
+        };
+        let line = format!("{timestamp} event={event} ip={ip} user={user}{detail_suffix}\n");
 
         match OpenOptions::new()
             .create(true)
@@ -77,6 +96,46 @@ impl Server {
             .map(|addr| addr.ip().to_string())
             .unwrap_or_else(|| "unknown".to_string())
     }
+
+    fn log_command_event(&self, mode: &str, command: &str, exit_status: u32) {
+        self.log_ip_event_with_details(
+            "command",
+            Some(&self.performer.ctx.username),
+            &[
+                ("mode", mode.to_string()),
+                ("exit_status", exit_status.to_string()),
+                ("command", command.to_string()),
+            ],
+        );
+        log::info!(
+            "Command from {} as '{}' via {}: {:?} (exit {})",
+            self.peer_ip(),
+            self.performer.ctx.username,
+            mode,
+            command,
+            exit_status
+        );
+    }
+
+    fn log_disconnect_event(&mut self, event: &str, reason: &str, mode: &str) {
+        if self.disconnect_logged {
+            return;
+        }
+
+        self.disconnect_logged = true;
+        self.log_ip_event_with_details(
+            event,
+            Some(&self.performer.ctx.username),
+            &[("mode", mode.to_string()), ("reason", reason.to_string())],
+        );
+        log::info!(
+            "Session ended for {} as '{}' via {} ({})",
+            self.peer_ip(),
+            self.performer.ctx.username,
+            mode,
+            reason
+        );
+    }
 }
 
 impl Clone for Server {
@@ -87,6 +146,7 @@ impl Clone for Server {
             ip_log_file: Arc::clone(&self.ip_log_file),
             peer_addr: self.peer_addr,
             failed_password_attempts: self.failed_password_attempts,
+            disconnect_logged: self.disconnect_logged,
             performer: self.performer.clone(),
             vte_parser: vte::Parser::new(),
         }
@@ -100,6 +160,11 @@ impl RusshServer for Server {
         let mut s = self.clone();
         s.peer_addr = peer;
         s.failed_password_attempts = 0;
+        s.disconnect_logged = false;
+        s.performer.set_logging_context(
+            s.peer_addr.map(|addr| addr.ip().to_string()),
+            Arc::clone(&s.ip_log_file),
+        );
         s.log_ip_event("connect", None);
         log::info!("Connection opened from {}", s.peer_ip());
         self.id += 1;
@@ -109,10 +174,14 @@ impl RusshServer for Server {
     fn handle_session_error(&mut self, error: <Self::Handler as russh::server::Handler>::Error) {
         match error {
             russh::Error::IO(err) if err.kind() == ErrorKind::UnexpectedEof => {
-                log::info!("Connection from {} closed by client", self.peer_ip());
+                if self.peer_addr.is_some() && !self.disconnect_logged {
+                    self.log_disconnect_event("disconnect", "client_closed", "session");
+                }
             }
             russh::Error::Disconnect => {
-                log::info!("Connection from {} disconnected", self.peer_ip());
+                if self.peer_addr.is_some() && !self.disconnect_logged {
+                    self.log_disconnect_event("disconnect", "session_disconnect", "session");
+                }
             }
             other => {
                 log::warn!("Session error from {}: {other:#?}", self.peer_ip());
@@ -241,18 +310,14 @@ impl Handler for Server {
 
         let command = String::from_utf8_lossy(data).trim().to_string();
         self.log_ip_event("exec_open", Some(&self.performer.ctx.username));
-        log::info!(
-            "Exec request from {} as '{}': {:?}",
-            self.peer_ip(),
-            self.performer.ctx.username,
-            command
-        );
 
         let result = run_command_line(&mut self.performer.ctx, &command, true);
+        self.log_command_event("exec", &command, result.exit_status);
         if !result.output.is_empty() {
             session.data(channel, result.output)?;
         }
 
+        self.log_disconnect_event("disconnect", "exec_complete", "exec");
         session.exit_status_request(channel, result.exit_status)?;
         session.eof(channel)?;
         session.close(channel)?;
@@ -280,9 +345,23 @@ impl Handler for Server {
         }
 
         if self.performer.disconnect {
+            let reason = if self.performer.ctx.should_exit {
+                "shell_exit"
+            } else {
+                "ctrl_d"
+            };
+            self.log_disconnect_event("disconnect", reason, "interactive");
             return Err(russh::Error::Disconnect);
         }
 
         Ok(())
     }
+}
+
+fn escape_log_value(value: &str) -> String {
+    value
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\r', "\\r")
+        .replace('\n', "\\n")
 }
