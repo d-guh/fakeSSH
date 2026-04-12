@@ -4,6 +4,12 @@ use vte::Perform;
 use crate::commands;
 use crate::commands::CommandContext;
 
+pub struct CommandRun {
+    pub output: Vec<u8>,
+    pub disconnect: bool,
+    pub exit_status: u32,
+}
+
 #[derive(Clone)]
 pub struct ShellPerformer {
     pub(crate) ctx: CommandContext,
@@ -41,28 +47,14 @@ impl ShellPerformer {
         self.history_index = None;
         self.history_stash.clear();
 
-        let raw_parts: Vec<&str> = cmd.split_whitespace().collect();
-
-        if raw_parts.is_empty() {
+        let result = run_command_line(&mut self.ctx, &cmd, true);
+        if result.output.is_empty() && cmd.is_empty() {
             self.output.extend_from_slice(self.ctx.prompt().as_bytes());
             return;
         }
 
-        let expanded_parts = commands::expand_alias(&raw_parts);
-        let parts = expanded_parts
-            .iter()
-            .map(|part| part.as_str())
-            .collect::<Vec<_>>();
-
-        if let Some(result) = commands::execute(&parts, &mut self.ctx) {
-            self.output.extend_from_slice(&result);
-        } else {
-            self.output.extend_from_slice(
-                format!("-bash: {}: command not found", raw_parts[0]).as_bytes(),
-            );
-        }
-        self.output.extend_from_slice(b"\r\n");
-        if self.ctx.should_exit {
+        self.output.extend_from_slice(&result.output);
+        if result.disconnect {
             self.disconnect = true;
             return;
         }
@@ -166,6 +158,48 @@ impl ShellPerformer {
             new_line.replace_range(token_start..cursor_byte, &completed);
             self.set_line(new_line);
         }
+    }
+}
+
+pub fn run_command_line(
+    ctx: &mut CommandContext,
+    line: &str,
+    append_trailing_newline: bool,
+) -> CommandRun {
+    let cmd = line.trim();
+    let raw_parts: Vec<&str> = cmd.split_whitespace().collect();
+
+    if raw_parts.is_empty() {
+        return CommandRun {
+            output: Vec::new(),
+            disconnect: false,
+            exit_status: 0,
+        };
+    }
+
+    let expanded_parts = commands::expand_alias(&raw_parts);
+    let parts = expanded_parts
+        .iter()
+        .map(|part| part.as_str())
+        .collect::<Vec<_>>();
+
+    let (mut output, exit_status) = if let Some(result) = commands::execute(&parts, ctx) {
+        (result, 0)
+    } else {
+        (
+            format!("-bash: {}: command not found", raw_parts[0]).into_bytes(),
+            127,
+        )
+    };
+
+    if append_trailing_newline && !output.is_empty() {
+        output.extend_from_slice(b"\r\n");
+    }
+
+    CommandRun {
+        output,
+        disconnect: ctx.should_exit,
+        exit_status,
     }
 }
 

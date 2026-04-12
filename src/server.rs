@@ -13,7 +13,7 @@ use russh::{Channel, ChannelId, MethodKind, MethodSet, Pty};
 use tokio::time::sleep;
 
 use crate::commands::CommandContext;
-use crate::shell::ShellPerformer;
+use crate::shell::{ShellPerformer, run_command_line};
 
 pub struct Server {
     id: usize,
@@ -213,6 +213,7 @@ impl Handler for Server {
         channel: ChannelId,
         session: &mut Session,
     ) -> Result<(), Self::Error> {
+        session.channel_success(channel)?;
         self.log_ip_event("shell_open", Some(&self.performer.ctx.username));
         let timestamp = chrono::Local::now().format("%a %b %e %H:%M:%S %Y");
         let peer_ip = self
@@ -227,6 +228,34 @@ impl Handler for Server {
             self.performer.ctx.prompt()
         );
         session.data(channel, banner.into_bytes())?;
+        Ok(())
+    }
+
+    async fn exec_request(
+        &mut self,
+        channel: ChannelId,
+        data: &[u8],
+        session: &mut Session,
+    ) -> Result<(), Self::Error> {
+        session.channel_success(channel)?;
+
+        let command = String::from_utf8_lossy(data).trim().to_string();
+        self.log_ip_event("exec_open", Some(&self.performer.ctx.username));
+        log::info!(
+            "Exec request from {} as '{}': {:?}",
+            self.peer_ip(),
+            self.performer.ctx.username,
+            command
+        );
+
+        let result = run_command_line(&mut self.performer.ctx, &command, true);
+        if !result.output.is_empty() {
+            session.data(channel, result.output)?;
+        }
+
+        session.exit_status_request(channel, result.exit_status)?;
+        session.eof(channel)?;
+        session.close(channel)?;
         Ok(())
     }
 
