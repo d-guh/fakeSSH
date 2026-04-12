@@ -4,8 +4,8 @@ listen = "0.0.0.0"
 port = 2222
 host_key_file = "host_key.pem"
 ip_log_file = "ips.log"
-inactivity_timeout_secs = 3600
-auth_rejection_time_secs = 3
+inactivity_timeout_secs = 360
+auth_rejection_time_secs = 0
 auth_rejection_time_initial_secs = 0
 
 [credentials]

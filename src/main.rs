@@ -3,6 +3,8 @@ pub mod server;
 pub mod shell;
 
 use commands::CommandContext;
+use russh::MethodKind;
+use russh::MethodSet;
 use russh::keys::ssh_key::LineEnding;
 use russh::keys::ssh_key::rand_core::OsRng;
 use russh::keys::{Algorithm, PrivateKey};
@@ -30,10 +32,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         inactivity_timeout: Some(std::time::Duration::from_secs(
             cfg.server.inactivity_timeout_secs,
         )),
-        auth_rejection_time: std::time::Duration::from_secs(cfg.server.auth_rejection_time_secs),
-        auth_rejection_time_initial: Some(std::time::Duration::from_secs(
-            cfg.server.auth_rejection_time_initial_secs,
-        )),
+        methods: MethodSet::from(&[MethodKind::Password][..]),
+        max_auth_attempts: 4,
+        auth_rejection_time: std::time::Duration::from_secs(0),
+        auth_rejection_time_initial: Some(std::time::Duration::from_secs(0)),
         keys: vec![get_or_create_host_key(&cfg.server.host_key_file)?],
         ..Default::default()
     };

@@ -1,13 +1,16 @@
 use std::collections::HashMap;
 use std::fs::OpenOptions;
+use std::io::ErrorKind;
 use std::io::Write;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 
 use russh::keys::ssh_key;
 use russh::server::{Auth, Handler, Msg, Server as RusshServer, Session};
 use russh::{Channel, ChannelId, MethodKind, MethodSet, Pty};
+use tokio::time::sleep;
 
 use crate::commands::CommandContext;
 use crate::shell::ShellPerformer;
@@ -17,9 +20,15 @@ pub struct Server {
     credentials: Arc<HashMap<String, String>>,
     ip_log_file: Arc<PathBuf>,
     peer_addr: Option<SocketAddr>,
+    failed_password_attempts: usize,
     performer: ShellPerformer,
     vte_parser: vte::Parser,
 }
+
+const MAX_PASSWORD_ATTEMPTS: usize = 3;
+const FAILED_PASSWORD_DELAY_SECS: u64 = 4;
+//const PASSWORD_ONLY_METHODS: &[MethodKind] = &[MethodKind::Password];
+const ADVERTISED_AUTH_METHODS: &[MethodKind] = &[MethodKind::PublicKey, MethodKind::Password];
 
 impl Server {
     pub fn new(
@@ -32,6 +41,7 @@ impl Server {
             credentials,
             ip_log_file,
             peer_addr: None,
+            failed_password_attempts: 0,
             performer: ShellPerformer::new(ctx),
             vte_parser: vte::Parser::new(),
         }
@@ -61,6 +71,12 @@ impl Server {
             }
         }
     }
+
+    fn peer_ip(&self) -> String {
+        self.peer_addr
+            .map(|addr| addr.ip().to_string())
+            .unwrap_or_else(|| "unknown".to_string())
+    }
 }
 
 impl Clone for Server {
@@ -70,6 +86,7 @@ impl Clone for Server {
             credentials: Arc::clone(&self.credentials),
             ip_log_file: Arc::clone(&self.ip_log_file),
             peer_addr: self.peer_addr,
+            failed_password_attempts: self.failed_password_attempts,
             performer: self.performer.clone(),
             vte_parser: vte::Parser::new(),
         }
@@ -82,48 +99,89 @@ impl RusshServer for Server {
     fn new_client(&mut self, peer: Option<std::net::SocketAddr>) -> Self {
         let mut s = self.clone();
         s.peer_addr = peer;
+        s.failed_password_attempts = 0;
         s.log_ip_event("connect", None);
+        log::info!("Connection opened from {}", s.peer_ip());
         self.id += 1;
         s
     }
 
     fn handle_session_error(&mut self, error: <Self::Handler as russh::server::Handler>::Error) {
-        log::error!("Session error: {error:#?}");
+        match error {
+            russh::Error::IO(err) if err.kind() == ErrorKind::UnexpectedEof => {
+                log::info!("Connection from {} closed by client", self.peer_ip());
+            }
+            russh::Error::Disconnect => {
+                log::info!("Connection from {} disconnected", self.peer_ip());
+            }
+            other => {
+                log::warn!("Session error from {}: {other:#?}", self.peer_ip());
+            }
+        }
     }
 }
 
 impl Handler for Server {
     type Error = russh::Error;
 
+    async fn auth_none(&mut self, user: &str) -> Result<Auth, Self::Error> {
+        log::debug!(
+            "Auth method probe from {} for user '{}' -> password required",
+            self.peer_ip(),
+            user
+        );
+        Ok(Auth::Reject {
+            proceed_with_methods: Some(MethodSet::from(ADVERTISED_AUTH_METHODS)),
+            partial_success: false,
+        })
+    }
+
     async fn auth_password(&mut self, user: &str, password: &str) -> Result<Auth, Self::Error> {
         match self.credentials.get(user) {
             Some(stored) if stored == password => {
+                self.failed_password_attempts = 0;
                 self.performer.ctx.username = user.to_string();
                 self.performer.ctx.login_time =
                     chrono::Local::now().format("%Y-%m-%d %H:%M").to_string();
                 self.log_ip_event("auth_success", Some(user));
-                log::info!("Accepted login for user '{user}'");
+                log::info!("Accepted login for user '{}' from {}", user, self.peer_ip());
                 Ok(Auth::Accept)
             }
             _ => {
+                self.failed_password_attempts += 1;
+                let attempts_left =
+                    MAX_PASSWORD_ATTEMPTS.saturating_sub(self.failed_password_attempts);
                 self.log_ip_event("auth_failure", Some(user));
-                log::info!("Rejected login for user '{user}'");
+                log::info!(
+                    "Rejected login for user '{}' from {} (attempt {}/{}, {} remaining)",
+                    user,
+                    self.peer_ip(),
+                    self.failed_password_attempts,
+                    MAX_PASSWORD_ATTEMPTS,
+                    attempts_left
+                );
+                sleep(Duration::from_secs(FAILED_PASSWORD_DELAY_SECS)).await;
+
                 Ok(Auth::Reject {
-                    proceed_with_methods: None,
+                    proceed_with_methods: Some(MethodSet::from(ADVERTISED_AUTH_METHODS)),
                     partial_success: false,
                 })
             }
         }
     }
 
-    // For right now we reject public key auth, push to password auth
     async fn auth_publickey(
         &mut self,
-        _user: &str,
+        user: &str,
         _key: &ssh_key::PublicKey,
     ) -> Result<Auth, Self::Error> {
+        log::debug!(
+            "Rejected public key auth from {} for user '{}'",
+            self.peer_ip(),
+            user
+        );
         Ok(Auth::Reject {
-            proceed_with_methods: Some(MethodSet::from(&[MethodKind::Password][..])),
+            proceed_with_methods: Some(MethodSet::from(ADVERTISED_AUTH_METHODS)),
             partial_success: false,
         })
     }
