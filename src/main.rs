@@ -5,12 +5,15 @@ pub mod shell;
 use commands::CommandContext;
 use russh::MethodKind;
 use russh::MethodSet;
+use russh::Preferred;
+use russh::keys::ssh_key::HashAlg;
 use russh::keys::ssh_key::LineEnding;
 use russh::keys::ssh_key::rand_core::OsRng;
 use russh::keys::{Algorithm, PrivateKey};
 use russh::server::Server as _;
 use serde::Deserialize;
 use server::Server;
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -25,18 +28,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cfg = Config::new("config.toml")?;
 
     let credentials = Arc::new(cfg.credentials);
-    let ctx = CommandContext::new(cfg.server.hostname);
+    let ctx = CommandContext::new(cfg.server.hostname.clone());
     let ip_log_file = Arc::new(PathBuf::from(&cfg.server.ip_log_file));
 
     let config = russh::server::Config {
         inactivity_timeout: Some(std::time::Duration::from_secs(
             cfg.server.inactivity_timeout_secs,
         )),
+        nodelay: true,
         methods: MethodSet::from(&[MethodKind::Password][..]),
         max_auth_attempts: 4,
-        auth_rejection_time: std::time::Duration::from_secs(0),
-        auth_rejection_time_initial: Some(std::time::Duration::from_secs(0)),
-        keys: vec![get_or_create_host_key(&cfg.server.host_key_file)?],
+        auth_rejection_time: std::time::Duration::from_secs(cfg.server.auth_rejection_time_secs),
+        auth_rejection_time_initial: Some(std::time::Duration::from_secs(
+            cfg.server.auth_rejection_time_initial_secs,
+        )),
+        preferred: preferred_algorithms(),
+        keys: load_host_keys(&cfg.server)?,
         ..Default::default()
     };
     let config = Arc::new(config);
@@ -52,13 +59,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-pub fn get_or_create_host_key(path: &str) -> Result<PrivateKey, Box<dyn std::error::Error>> {
+pub fn get_or_create_host_key(
+    path: &str,
+    algorithm: Algorithm,
+) -> Result<PrivateKey, Box<dyn std::error::Error>> {
     let p = std::path::Path::new(path);
     if p.exists() {
         let pem = std::fs::read_to_string(p)?;
         Ok(PrivateKey::from_openssh(pem.as_bytes())?)
     } else {
-        let key = PrivateKey::random(&mut OsRng, Algorithm::Ed25519)?;
+        let key = PrivateKey::random(&mut OsRng, algorithm)?;
         let pem = key.to_openssh(LineEnding::LF)?;
         std::fs::write(p, pem.as_bytes())?;
         #[cfg(unix)]
@@ -71,22 +81,123 @@ pub fn get_or_create_host_key(path: &str) -> Result<PrivateKey, Box<dyn std::err
     }
 }
 
+fn load_host_keys(server: &ServerConfig) -> Result<Vec<PrivateKey>, Box<dyn std::error::Error>> {
+    let configured_paths = if server.host_key_files.is_empty() {
+        vec![server.primary_host_key_file()?.to_string()]
+    } else {
+        server.host_key_files.clone()
+    };
+
+    let mut keys = Vec::new();
+    let mut seen_paths = std::collections::HashSet::new();
+
+    for path in configured_paths {
+        if seen_paths.insert(path.clone()) {
+            keys.push(get_or_create_host_key(
+                &path,
+                infer_host_key_algorithm(&path),
+            )?);
+        }
+    }
+
+    let has_rsa_key = keys.iter().any(|key| key.algorithm().is_rsa());
+    if !has_rsa_key {
+        let primary_host_key = server.primary_host_key_file()?;
+        let rsa_path = server
+            .rsa_host_key_file
+            .clone()
+            .unwrap_or_else(|| derive_rsa_host_key_path(primary_host_key));
+
+        if seen_paths.insert(rsa_path.clone()) {
+            keys.push(get_or_create_host_key(
+                &rsa_path,
+                Algorithm::Rsa {
+                    hash: Some(HashAlg::Sha512),
+                },
+            )?);
+        }
+    }
+
+    Ok(keys)
+}
+
+fn infer_host_key_algorithm(path: &str) -> Algorithm {
+    let lower = path.to_ascii_lowercase();
+    if lower.contains("rsa") {
+        Algorithm::Rsa {
+            hash: Some(HashAlg::Sha512),
+        }
+    } else {
+        Algorithm::Ed25519
+    }
+}
+
+fn derive_rsa_host_key_path(primary_path: &str) -> String {
+    let path = std::path::Path::new(primary_path);
+    let parent = path.parent();
+    let stem = path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or("host_key");
+    let extension = path.extension().and_then(|ext| ext.to_str());
+
+    let file_name = match extension {
+        Some(ext) if !ext.is_empty() => format!("{stem}_rsa.{ext}"),
+        _ => format!("{stem}_rsa"),
+    };
+
+    parent
+        .map(|parent| parent.join(&file_name))
+        .unwrap_or_else(|| PathBuf::from(file_name))
+        .to_string_lossy()
+        .into_owned()
+}
+
+fn preferred_algorithms() -> Preferred {
+    let mut preferred = Preferred::default();
+    preferred.key = Cow::Owned(vec![
+        Algorithm::Ed25519,
+        Algorithm::Rsa {
+            hash: Some(HashAlg::Sha512),
+        },
+        Algorithm::Rsa {
+            hash: Some(HashAlg::Sha256),
+        },
+        Algorithm::Rsa { hash: None },
+    ]);
+    preferred
+}
+
 #[derive(Deserialize)]
 pub struct Config {
     pub server: ServerConfig,
     pub credentials: HashMap<String, String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct ServerConfig {
     pub hostname: String,
     pub listen: String,
     pub port: u16,
-    pub host_key_file: String,
+    pub host_key_file: Option<String>,
+    #[serde(default)]
+    pub host_key_files: Vec<String>,
+    pub rsa_host_key_file: Option<String>,
     pub ip_log_file: String,
     pub inactivity_timeout_secs: u64,
     pub auth_rejection_time_secs: u64,
     pub auth_rejection_time_initial_secs: u64,
+}
+
+impl ServerConfig {
+    fn primary_host_key_file(&self) -> Result<&str, Box<dyn std::error::Error>> {
+        self.host_key_file
+            .as_deref()
+            .or_else(|| self.host_key_files.first().map(String::as_str))
+            .ok_or_else(|| {
+                "server.host_key_file or server.host_key_files must be configured".into()
+            })
+    }
 }
 
 impl Config {

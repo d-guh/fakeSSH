@@ -28,8 +28,7 @@ pub struct Server {
 
 const MAX_PASSWORD_ATTEMPTS: usize = 3;
 const FAILED_PASSWORD_DELAY_SECS: u64 = 4;
-//const PASSWORD_ONLY_METHODS: &[MethodKind] = &[MethodKind::Password];
-const ADVERTISED_AUTH_METHODS: &[MethodKind] = &[MethodKind::PublicKey, MethodKind::Password];
+const ADVERTISED_AUTH_METHODS: &[MethodKind] = &[MethodKind::Password];
 
 impl Server {
     pub fn new(
@@ -246,6 +245,22 @@ impl Handler for Server {
     ) -> Result<Auth, Self::Error> {
         log::debug!(
             "Rejected public key auth from {} for user '{}'",
+            self.peer_ip(),
+            user
+        );
+        Ok(Auth::Reject {
+            proceed_with_methods: Some(MethodSet::from(ADVERTISED_AUTH_METHODS)),
+            partial_success: false,
+        })
+    }
+
+    async fn auth_publickey_offered(
+        &mut self,
+        user: &str,
+        _key: &ssh_key::PublicKey,
+    ) -> Result<Auth, Self::Error> {
+        log::debug!(
+            "Rejected offered public key from {} for user '{}'",
             self.peer_ip(),
             user
         );
