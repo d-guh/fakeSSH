@@ -15,12 +15,20 @@ use serde::Deserialize;
 use server::{MAX_TOTAL_AUTH_ATTEMPTS, Server};
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::io;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() {
+    if let Err(err) = run().await {
+        eprintln!("{err}");
+        std::process::exit(1);
+    }
+}
+
+async fn run() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::builder()
         .filter_level(log::LevelFilter::Info)
         .init();
@@ -49,7 +57,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = Arc::new(config);
     let mut sh = Server::new(credentials, ctx, ip_log_file);
 
-    let socket = TcpListener::bind((&*cfg.server.listen, cfg.server.port)).await?;
+    let socket = TcpListener::bind((&*cfg.server.listen, cfg.server.port))
+        .await
+        .map_err(|err| bind_error(&cfg.server.listen, cfg.server.port, err))?;
     log::info!(
         "Honeypot listening on {}:{}",
         cfg.server.listen,
@@ -57,6 +67,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     sh.run_on_socket(config, &socket).await?;
     Ok(())
+}
+
+fn bind_error(listen: &str, port: u16, err: io::Error) -> io::Error {
+    let message = match err.kind() {
+        io::ErrorKind::PermissionDenied => format!(
+            "Failed to bind {}:{}: permission denied. Try a port above 1024 or run with elevated privileges. OS error: {}",
+            listen, port, err
+        ),
+        io::ErrorKind::AddrInUse => format!(
+            "Failed to bind {}:{}: address already in use. Another process is already listening on that port. OS error: {}",
+            listen, port, err
+        ),
+        _ => format!("Failed to bind {}:{}: {}", listen, port, err),
+    };
+
+    io::Error::new(err.kind(), message)
 }
 
 pub fn get_or_create_host_key(
