@@ -26,7 +26,8 @@ pub struct Server {
     vte_parser: vte::Parser,
 }
 
-const MAX_PASSWORD_ATTEMPTS: usize = 3;
+pub(crate) const MAX_PASSWORD_ATTEMPTS: usize = 3;
+pub(crate) const MAX_TOTAL_AUTH_ATTEMPTS: usize = MAX_PASSWORD_ATTEMPTS + 1;
 const FAILED_PASSWORD_DELAY_SECS: u64 = 4;
 const ADVERTISED_AUTH_METHODS: &[MethodKind] = &[MethodKind::Password];
 
@@ -117,6 +118,17 @@ impl Server {
     }
 
     fn log_disconnect_event(&mut self, event: &str, reason: &str, mode: &str) {
+        let username = self.performer.ctx.username.clone();
+        self.log_disconnect_event_for_user(event, reason, mode, Some(&username));
+    }
+
+    fn log_disconnect_event_for_user(
+        &mut self,
+        event: &str,
+        reason: &str,
+        mode: &str,
+        user: Option<&str>,
+    ) {
         if self.disconnect_logged {
             return;
         }
@@ -124,16 +136,37 @@ impl Server {
         self.disconnect_logged = true;
         self.log_ip_event_with_details(
             event,
-            Some(&self.performer.ctx.username),
+            user,
             &[("mode", mode.to_string()), ("reason", reason.to_string())],
         );
-        log::info!(
-            "Session ended for {} as '{}' via {} ({})",
-            self.peer_ip(),
-            self.performer.ctx.username,
-            mode,
-            reason
-        );
+
+        if let Some(user) = user {
+            log::info!(
+                "Session ended for {} as '{}' via {} ({})",
+                self.peer_ip(),
+                user,
+                mode,
+                reason
+            );
+        } else {
+            log::info!(
+                "Connection ended for {} via {} ({})",
+                self.peer_ip(),
+                mode,
+                reason
+            );
+        }
+    }
+
+    fn log_transport_close(&mut self, reason: &str) {
+        if self.peer_addr.is_some() && !self.disconnect_logged {
+            self.log_disconnect_event_for_user("disconnect", reason, "transport", None);
+        } else {
+            match self.peer_addr {
+                Some(_) => log::info!("Connection ended from {} ({})", self.peer_ip(), reason),
+                None => log::info!("Connection ended ({})", reason),
+            }
+        }
     }
 }
 
@@ -172,16 +205,27 @@ impl RusshServer for Server {
 
     fn handle_session_error(&mut self, error: <Self::Handler as russh::server::Handler>::Error) {
         match error {
-            russh::Error::IO(err) if err.kind() == ErrorKind::UnexpectedEof => {
-                if self.peer_addr.is_some() && !self.disconnect_logged {
-                    self.log_disconnect_event("disconnect", "client_closed", "session");
+            russh::Error::IO(err) => match err.kind() {
+                ErrorKind::UnexpectedEof => {
+                    self.log_transport_close("client_closed");
                 }
-            }
-            russh::Error::Disconnect => {
-                if self.peer_addr.is_some() && !self.disconnect_logged {
-                    self.log_disconnect_event("disconnect", "session_disconnect", "session");
+                ErrorKind::ConnectionReset => {
+                    self.log_transport_close("connection_reset_by_peer");
                 }
-            }
+                ErrorKind::BrokenPipe => {
+                    self.log_transport_close("broken_pipe");
+                }
+                ErrorKind::ConnectionAborted => {
+                    self.log_transport_close("connection_aborted");
+                }
+                ErrorKind::TimedOut => {
+                    self.log_transport_close("connection_timed_out");
+                }
+                _ => {
+                    log::warn!("Session error from {}: {err}", self.peer_ip());
+                }
+            },
+            russh::Error::Disconnect => {}
             other => {
                 log::warn!("Session error from {}: {other:#?}", self.peer_ip());
             }
@@ -216,19 +260,34 @@ impl Handler for Server {
                 Ok(Auth::Accept)
             }
             _ => {
-                self.failed_password_attempts += 1;
-                let attempts_left =
-                    MAX_PASSWORD_ATTEMPTS.saturating_sub(self.failed_password_attempts);
+                self.failed_password_attempts = self.failed_password_attempts.saturating_add(1);
+                let attempts_used = self.failed_password_attempts.min(MAX_PASSWORD_ATTEMPTS);
+                let attempts_left = MAX_PASSWORD_ATTEMPTS.saturating_sub(attempts_used);
                 self.log_ip_event("auth_failure", Some(user));
                 log::info!(
                     "Rejected login for user '{}' from {} (attempt {}/{}, {} remaining)",
                     user,
                     self.peer_ip(),
-                    self.failed_password_attempts,
+                    attempts_used,
                     MAX_PASSWORD_ATTEMPTS,
                     attempts_left
                 );
                 sleep(Duration::from_secs(FAILED_PASSWORD_DELAY_SECS)).await;
+
+                if self.failed_password_attempts >= MAX_PASSWORD_ATTEMPTS {
+                    self.log_ip_event_with_details(
+                        "auth_lockout",
+                        Some(user),
+                        &[("attempts", attempts_used.to_string())],
+                    );
+                    self.log_disconnect_event_for_user(
+                        "disconnect",
+                        "auth_attempt_limit",
+                        "auth",
+                        Some(user),
+                    );
+                    return Err(russh::Error::Disconnect);
+                }
 
                 Ok(Auth::Reject {
                     proceed_with_methods: Some(MethodSet::from(ADVERTISED_AUTH_METHODS)),
@@ -289,6 +348,24 @@ impl Handler for Server {
         _modes: &[(Pty, u32)],
         _session: &mut Session,
     ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    async fn channel_close(
+        &mut self,
+        _channel: ChannelId,
+        _session: &mut Session,
+    ) -> Result<(), Self::Error> {
+        self.log_disconnect_event("disconnect", "channel_close", "session");
+        Ok(())
+    }
+
+    async fn channel_eof(
+        &mut self,
+        _channel: ChannelId,
+        _session: &mut Session,
+    ) -> Result<(), Self::Error> {
+        self.log_disconnect_event("disconnect", "channel_eof", "session");
         Ok(())
     }
 

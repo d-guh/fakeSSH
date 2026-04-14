@@ -12,7 +12,7 @@ use russh::keys::ssh_key::rand_core::OsRng;
 use russh::keys::{Algorithm, PrivateKey};
 use russh::server::Server as _;
 use serde::Deserialize;
-use server::Server;
+use server::{MAX_TOTAL_AUTH_ATTEMPTS, Server};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -37,7 +37,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )),
         nodelay: true,
         methods: MethodSet::from(&[MethodKind::Password][..]),
-        max_auth_attempts: 4,
+        max_auth_attempts: MAX_TOTAL_AUTH_ATTEMPTS,
         auth_rejection_time: std::time::Duration::from_secs(cfg.server.auth_rejection_time_secs),
         auth_rejection_time_initial: Some(std::time::Duration::from_secs(
             cfg.server.auth_rejection_time_initial_secs,
